@@ -27,6 +27,10 @@ export default function App() {
   // the SQ hub). null = not an admin. Threaded through HeaderRight
   // so the settings dropdown can show the admin-panel row.
   const [adminRecord, setAdminRecord] = useState(null)
+  // Tracks whether the admin lookup has completed (separate from "is
+  // admin"). Needed so we don't redirect non-admins before the lookup
+  // resolves — that would bounce admins out too on slow networks.
+  const [adminLoaded, setAdminLoaded] = useState(false)
   // Detect password-recovery link from the URL hash synchronously so we can
   // redirect to the SQ hub (which owns the recovery form) before Supabase
   // consumes the hash and swaps it for a session token.
@@ -72,15 +76,18 @@ export default function App() {
 
   // Load admin record (if any) from the shared admins table.
   useEffect(() => {
-    if (!session?.user) { setAdminRecord(null); return }
+    if (!session?.user) { setAdminRecord(null); setAdminLoaded(false); return }
     let cancelled = false
+    setAdminLoaded(false)
     supabase
       .from('admins')
       .select('user_id, permissions, is_master')
       .eq('user_id', session.user.id)
       .maybeSingle()
       .then(({ data }) => {
-        if (!cancelled) setAdminRecord(data ?? null)
+        if (cancelled) return
+        setAdminRecord(data ?? null)
+        setAdminLoaded(true)
       })
     return () => { cancelled = true }
   }, [session])
@@ -89,14 +96,18 @@ export default function App() {
 
   // The SQ hub owns the entire auth surface. Redirect logged-out users —
   // and any legacy password-recovery emails — to /games/ which handles login.
+  // Yahdle is admin-only while in beta — non-admins get redirected to
+  // the hub once their admin lookup resolves.
   useEffect(() => {
     if (isRecovery) {
       window.location.replace(`${window.location.origin}/games/${window.location.hash}`)
     } else if (session === null) {
       const ret = window.location.pathname + window.location.search
       window.location.replace(`${window.location.origin}/games/?return=${encodeURIComponent(ret)}`)
+    } else if (session && adminLoaded && !isAdmin) {
+      window.location.replace(`${window.location.origin}/games/`)
     }
-  }, [session, isRecovery])
+  }, [session, isRecovery, adminLoaded, isAdmin])
 
   if (session === undefined && !isRecovery) {
     return (
@@ -110,6 +121,26 @@ export default function App() {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <p className="font-display text-2xl">Redirecting to login…</p>
+      </div>
+    )
+  }
+
+  // Logged in but admin lookup hasn't resolved yet — wait so we don't
+  // briefly render the lobby for a non-admin before the redirect fires.
+  if (!adminLoaded) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <p className="font-display text-2xl">Loading Yahdle 🎲…</p>
+      </div>
+    )
+  }
+
+  // Non-admins are bounced to the hub by the effect above; render a
+  // placeholder while the redirect happens so we don't flash the lobby.
+  if (!isAdmin) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <p className="font-display text-2xl">Redirecting…</p>
       </div>
     )
   }

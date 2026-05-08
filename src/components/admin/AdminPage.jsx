@@ -1,70 +1,23 @@
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import toast from 'react-hot-toast'
 import {
   SQLobbyShell,
   SQLobbyHeader,
 } from '../../../../rae-side-quest/packages/sq-ui'
-import { supabase } from '../../lib/supabase.js'
 import AvatarMenu from '../lobby/AvatarMenu.jsx'
 import HeaderRight from '../HeaderRight.jsx'
 
-// Admin panel — Close Games view only. Admin permissions are managed
-// from the SQ hub (see rae-side-quest's admin tooling), so this page
-// only surfaces the per-game action a master admin grants you.
-//
-// Routed at /admin. Settings dropdown's admin row navigates here when
-// the signed-in user has a row in `public.admins` with `close_games`
-// in `permissions`.
-//
-// Wires to two RPCs created by supabase/migrations/yahdle_admin_close_game.sql:
-//   - yahdle_admin_list_open_games() — list waiting/active games
-//   - yahdle_admin_close_game(uuid)  — soft-close a game (no winner)
-//
-// If your game's table is named differently (e.g. yahdle_matches),
-// update the RPC names + the column references when you wire your
-// data layer.
+// Admin panel — playtest guide for now. Close-games tooling will land
+// when Yahdle gets a multiplayer mode (the scaffold left an RPC stub
+// at supabase/migrations/yahdle_admin_close_game.sql; not deployed
+// since solo doesn't need it).
 export default function AdminPage({ session, profile, isAdmin }) {
   const navigate = useNavigate()
-  const [games, setGames]         = useState([])
-  const [closingId, setClosingId] = useState(null)
-  const [loading, setLoading]     = useState(true)
 
-  // Hard gate: non-admins shouldn't reach this URL. Bounce them home
-  // rather than rendering an empty panel — the UI shouldn't suggest
-  // a feature they don't have access to.
+  // Hard gate: non-admins shouldn't reach this URL.
   useEffect(() => {
     if (!isAdmin) navigate('/', { replace: true })
   }, [isAdmin, navigate])
-
-  const loadGames = useCallback(async () => {
-    const { data, error } = await supabase.rpc('yahdle_admin_list_open_games')
-    if (error) {
-      console.error('yahdle_admin_list_open_games failed:', error)
-      toast.error(`Couldn't load games: ${error.message}`)
-    }
-    setGames(data ?? [])
-  }, [])
-
-  useEffect(() => {
-    if (!isAdmin) return
-    setLoading(true)
-    loadGames().finally(() => setLoading(false))
-  }, [isAdmin, loadGames])
-
-  async function closeGame(gameId) {
-    setClosingId(gameId)
-    try {
-      const { error } = await supabase.rpc('yahdle_admin_close_game', { p_game_id: gameId })
-      if (error) throw error
-      toast.success('Game closed.')
-      setGames(prev => prev.filter(g => g.id !== gameId))
-    } catch (err) {
-      toast.error(err.message)
-    } finally {
-      setClosingId(null)
-    }
-  }
 
   if (!isAdmin) return null
 
@@ -87,45 +40,87 @@ export default function AdminPage({ session, profile, isAdmin }) {
       </button>
 
       <section className="card">
-        <h2 className="font-display text-xl mb-1">🔒 Close Games</h2>
-        <p className="text-sm opacity-70 mb-3">
-          Close old or stuck games. They'll be marked finished with no
-          winner attribution and show up in history as "🛑 Game closed
-          by admin".
-        </p>
+        <h2 className="font-display text-xl mb-2">📖 Admin Guide</h2>
+        <details className="text-sm">
+          <summary className="cursor-pointer opacity-80 hover:opacity-100">Tap to expand</summary>
+          <div className="mt-3 space-y-3 leading-relaxed">
 
-        {loading ? (
-          <p className="text-sm opacity-60 italic">Loading…</p>
-        ) : games.length === 0 ? (
-          <p className="text-sm opacity-60 italic">No open games to close.</p>
-        ) : (
-          <ul className="space-y-2">
-            {games.map(g => (
-              <li
-                key={g.id}
-                className="flex items-center gap-2 rounded-xl px-3 py-2.5 bg-white border border-purple-100 dark:bg-[#1f1240] dark:border-[#2d1b55]"
-              >
-                <div className="flex-1 min-w-0">
-                  <div className="font-display text-sm truncate">
-                    {(g.player_names ?? []).join(' · ') || '(no players)'}
-                  </div>
-                  <div className="text-xs opacity-70">
-                    {g.status} · {new Date(g.created_at).toLocaleDateString()}
-                  </div>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => closeGame(g.id)}
-                  disabled={closingId === g.id}
-                  className="shrink-0 text-xs font-bold text-rose-600 dark:text-rose-300 hover:underline disabled:opacity-50"
-                >
-                  {closingId === g.id ? '…' : '✕ Close'}
-                </button>
-              </li>
-            ))}
-          </ul>
-        )}
+            <div>
+              <h3 className="font-bold mb-1">Daily seed</h3>
+              <p>
+                Every player on a given date sees the same dice and rolls. The
+                seed is built from the URL date plus an Atlantic-time rollover.
+                Two admins on the same date get identical puzzles — compare
+                strategy by comparing scores.
+              </p>
+            </div>
+
+            <div>
+              <h3 className="font-bold mb-1">↻ Reset (top-right of game page)</h3>
+              <p>
+                Wipes the saved game AND rolls a fresh puzzle variant. Each tap
+                = a different starting hand. The new variant persists across
+                reloads until you tap Reset again. Clear the
+                <code className="px-1 opacity-80">yahdle:salt:*</code> keys in
+                localStorage to return to the canonical daily.
+              </p>
+            </div>
+
+            <div>
+              <h3 className="font-bold mb-1">URL tricks for testing</h3>
+              <p>The <code className="px-1 opacity-80">gameId</code> in the URL is just a string fed into the seed:</p>
+              <ul className="list-disc pl-5 mt-1 space-y-0.5">
+                <li><code className="opacity-80">/solo/test-1</code>, <code className="opacity-80">/solo/test-2</code> — fresh puzzles</li>
+                <li><code className="opacity-80">/solo/2026-05-09</code> — tomorrow's puzzle</li>
+                <li><code className="opacity-80">/solo/2026-05-07</code> — yesterday's puzzle</li>
+              </ul>
+            </div>
+
+            <div>
+              <h3 className="font-bold mb-1">localStorage layout</h3>
+              <ul className="list-disc pl-5 space-y-0.5">
+                <li><code className="opacity-80">yahdle:state:&lt;userId&gt;:&lt;gameId&gt;</code> — turn / score / dice / builder</li>
+                <li><code className="opacity-80">yahdle:salt:&lt;userId&gt;:&lt;gameId&gt;</code> — admin Reset salt</li>
+              </ul>
+              <p className="mt-1">Wipe everything Yahdle has stored: devtools → Application → Local Storage → filter on <code className="px-1 opacity-80">yahdle:</code> → delete.</p>
+            </div>
+
+            <div>
+              <h3 className="font-bold mb-1">Letter pool</h3>
+              <p>
+                18 letters live on the dice: A E I O U + T R S N L D H M C P B W G.
+                F K J Q V X Y Z are not on any die — words containing them can't
+                be spelled.
+              </p>
+            </div>
+
+            <div>
+              <h3 className="font-bold mb-1">Categories cheat sheet</h3>
+              <ul className="list-disc pl-5 space-y-0.5">
+                <li>3-Letter / 4-Letter — any word of that length</li>
+                <li>Lexicon — uses all dice (currently 6 letters)</li>
+                <li>Double Up — repeated letter</li>
+                <li>Vowel Heavy / Consonant Heavy — 3+ vowels / 4+ cons</li>
+                <li>High Value — ≥10 pts · Low Ball — ≤4 pts</li>
+                <li>Bookends — same start & end · No Repeats — all unique</li>
+                <li>Long Shot — 5-letter, ≥12 pts · Wild Card — anything</li>
+              </ul>
+            </div>
+
+            <div>
+              <h3 className="font-bold mb-1">When playtesting reveals a balance issue</h3>
+              <ul className="list-disc pl-5 space-y-0.5">
+                <li><b>Category never fires:</b> count valid words via the dictionary; lower threshold if &lt;10.</li>
+                <li><b>Always fires:</b> raise threshold or rotate it out.</li>
+                <li><b>Dice feel impossible:</b> concentrate the alphabet further (drop letters, bump common-letter copies).</li>
+                <li><b>Multiple unfilled categories at game end:</b> add easier categories or soften thresholds.</li>
+              </ul>
+            </div>
+
+          </div>
+        </details>
       </section>
+
     </SQLobbyShell>
   )
 }
