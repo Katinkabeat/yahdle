@@ -153,10 +153,35 @@ export default function SoloGamePage({ session, profile, isAdmin }) {
     setState(s => ({ ...s, builder: [], used: new Array(DIE_COUNT).fill(false) }))
   }
 
+  // Inline-confirm state: which category is asking the player to take a 0.
+  // null = no pending confirm. The cell itself renders the Yes/No prompt.
+  const [zeroAskCategory, setZeroAskCategory] = useState(null)
+
+  function applyScore(categoryId, word, score) {
+    setState(s => ({
+      ...s,
+      scores: { ...s.scores, [categoryId]: { word, score } },
+      turn: s.turn + 1,
+      rollsThisTurn: 0,
+      doneRolling: false,
+      faces: new Array(DIE_COUNT).fill(null),
+      kept: new Array(DIE_COUNT).fill(false),
+      used: new Array(DIE_COUNT).fill(false),
+      builder: [],
+    }))
+    setZeroAskCategory(null)
+  }
+
+  // Tap on a category cell. Either scores the current word (if it fits)
+  // or pivots the cell into "take a 0?" mode.
   function tryScore(categoryId) {
     if (state.scores[categoryId]) return
+    const cat = CATEGORIES.find(c => c.id === categoryId)
+    if (!cat) return
+
+    // No word → ask for 0 inline
     if (!builderWord) {
-      toast.error('Build a word from the dice first')
+      setZeroAskCategory(categoryId)
       return
     }
     if (builderWord.length < 3) {
@@ -171,47 +196,25 @@ export default function SoloGamePage({ session, profile, isAdmin }) {
       toast.error(`"${builderWord}" isn't in the dictionary`)
       return
     }
-    const cat = CATEGORIES.find(c => c.id === categoryId)
-    if (!cat) return
     const ctx = { word: builderWord, faces: state.faces, score: builderScore }
-    if (!cat.validate(ctx)) {
-      toast.error(`"${builderWord}" doesn't fit ${cat.name}`)
+    const fits = cat.validate(ctx) &&
+      (categoryId !== 'lexicon' || isSpellableFromFaces(builderWord, state.faces).usedAll)
+    if (!fits) {
+      // Word doesn't fit this category → inline "take a 0?" prompt
+      setZeroAskCategory(categoryId)
       return
     }
-    if (categoryId === 'lexicon' && !isSpellableFromFaces(builderWord, state.faces).usedAll) {
-      toast.error('Lexicon needs all 5 dice')
-      return
-    }
-    if (!confirm(`Score ${builderWord} in ${cat.name} for ${builderScore} pts?`)) return
-    setState(s => ({
-      ...s,
-      scores: { ...s.scores, [categoryId]: { word: builderWord, score: builderScore } },
-      turn: s.turn + 1,
-      rollsThisTurn: 0,
-      doneRolling: false,
-      faces: new Array(DIE_COUNT).fill(null),
-      kept: new Array(DIE_COUNT).fill(false),
-      used: new Array(DIE_COUNT).fill(false),
-      builder: [],
-    }))
+    applyScore(categoryId, builderWord, builderScore)
     toast.success(`+${builderScore} • ${cat.name}`)
   }
 
-  function scoreZero(categoryId) {
+  function confirmZero(categoryId) {
     if (state.scores[categoryId]) return
-    const cat = CATEGORIES.find(c => c.id === categoryId)
-    if (!confirm(`Take a 0 in ${cat.name}?`)) return
-    setState(s => ({
-      ...s,
-      scores: { ...s.scores, [categoryId]: { word: '', score: 0 } },
-      turn: s.turn + 1,
-      rollsThisTurn: 0,
-      doneRolling: false,
-      faces: new Array(DIE_COUNT).fill(null),
-      kept: new Array(DIE_COUNT).fill(false),
-      used: new Array(DIE_COUNT).fill(false),
-      builder: [],
-    }))
+    applyScore(categoryId, '', 0)
+  }
+
+  function cancelZero() {
+    setZeroAskCategory(null)
   }
 
   return (
@@ -260,14 +263,47 @@ export default function SoloGamePage({ session, profile, isAdmin }) {
           <div className="grid grid-cols-2 gap-1.5">
             {CATEGORIES.map(cat => {
               const filled = state.scores[cat.id]
+              const asking = zeroAskCategory === cat.id
+
+              if (asking && !filled) {
+                const reason = builderWord
+                  ? `${builderWord} doesn’t fit here.`
+                  : `No word yet.`
+                return (
+                  <div
+                    key={cat.id}
+                    className="rounded-lg px-2 py-1.5 border border-amber-400/60 bg-amber-900/30 text-xs"
+                  >
+                    <div className="font-bold mb-1">{cat.name}</div>
+                    <div className="text-amber-200 mb-1.5 text-[11px]">
+                      {reason} Take a 0?
+                    </div>
+                    <div className="flex gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => confirmZero(cat.id)}
+                        className="flex-1 rounded bg-amber-400 text-amber-950 font-bold py-1"
+                      >
+                        Take 0
+                      </button>
+                      <button
+                        type="button"
+                        onClick={cancelZero}
+                        className="flex-1 rounded border border-white/30 text-white py-1"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                )
+              }
+
               return (
                 <button
                   key={cat.id}
                   type="button"
                   onClick={() => tryScore(cat.id)}
-                  onDoubleClick={() => scoreZero(cat.id)}
                   disabled={!!filled || isGameOver}
-                  title={filled ? '' : 'Tap to score word here • Double-tap to take a 0'}
                   className={`text-left rounded-lg px-2 py-1.5 border text-xs transition ${
                     filled
                       ? 'border-green-600/40 bg-green-900/20 cursor-default'
