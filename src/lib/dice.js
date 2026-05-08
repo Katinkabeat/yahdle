@@ -1,16 +1,17 @@
 // 6 custom Boggle-style dice. Each die: 8 faces. 48 face slots total.
 //
-// 21 letters covered (J/Q/X/Z dropped). 20 vowel faces (~42%). Top
-// spelling letters (T R S N L) tripled across different dice so 5- and
-// 6-letter words like STARE, HEART, FRIEND, BETTER stay reliably
-// spellable after locks. D and M doubled to support common letter pairs.
+// Concentrated alphabet — only 18 letters covered (F K J Q V X Y Z dropped)
+// so each common letter has more placements and rolls land on workable
+// combos more often. Top spelling letters T R S N L each appear on 4 of
+// the 6 dice. Vowels A E I O U get 4-5 placements. 20 vowel faces
+// (~42%). Spice letters (D H M C P B W G) one each.
 export const DICE = [
-  ['A', 'E', 'O', 'T', 'R', 'N', 'D', 'B'],
-  ['E', 'I', 'O', 'T', 'R', 'S', 'H', 'P'],
-  ['A', 'E', 'U', 'S', 'L', 'M', 'C', 'Y'],
-  ['A', 'I', 'O', 'T', 'S', 'L', 'W', 'F'],
-  ['A', 'E', 'I', 'U', 'R', 'N', 'D', 'V'],
-  ['E', 'I', 'O', 'U', 'N', 'L', 'M', 'G'],
+  ['A', 'E', 'I', 'T', 'R', 'N', 'L', 'D'],
+  ['A', 'E', 'O', 'T', 'R', 'S', 'N', 'H'],
+  ['A', 'I', 'U', 'T', 'S', 'N', 'L', 'M'],
+  ['A', 'E', 'O', 'U', 'R', 'S', 'L', 'C'],
+  ['E', 'I', 'O', 'U', 'T', 'R', 'P', 'B'],
+  ['E', 'I', 'O', 'S', 'N', 'L', 'W', 'G'],
 ]
 
 export const DIE_COUNT = DICE.length
