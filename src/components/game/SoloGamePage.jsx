@@ -225,6 +225,21 @@ export default function SoloGamePage({ session, profile, isAdmin }) {
               {isGameOver ? `Final: ${totalScore}` : `Turn ${state.turn}/${TOTAL_TURNS} • ${totalScore} pts`}
             </span>
           }
+          rightSlot={
+            isAdmin ? (
+              <button
+                type="button"
+                onClick={() => {
+                  if (!confirm('Reset today’s game? Your progress will be lost.')) return
+                  localStorage.removeItem(storageKey(userId, gameId))
+                  setState(makeInitialState())
+                }}
+                className="text-xs underline opacity-60 hover:opacity-100"
+              >
+                Reset
+              </button>
+            ) : null
+          }
         />
       }
     >
