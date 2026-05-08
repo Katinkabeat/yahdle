@@ -5,7 +5,7 @@ export default defineConfig({
   plugins: [react()],
   base: '/yahdle/',
   server: {
-    port: 5184,
+    port: 5186,
     strictPort: true,
   },
 })
