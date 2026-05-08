@@ -234,9 +234,10 @@ export default function SoloGamePage({ session, profile, isAdmin }) {
                   localStorage.removeItem(storageKey(userId, gameId))
                   setState(makeInitialState())
                 }}
-                className="text-xs underline opacity-60 hover:opacity-100"
+                className="text-xs font-bold px-2 py-1 rounded border border-amber-400/60 text-amber-300 hover:bg-amber-400/10"
+                title="Admin-only: wipe today's saved game"
               >
-                Reset
+                ↻ Reset
               </button>
             ) : null
           }
