@@ -116,8 +116,8 @@ export const CATEGORIES = [
   {
     id: 'longshot',
     name: 'Long Shot',
-    desc: '5-letter, ≥15 pts',
-    validate: ({ word, score }) => word.length === 5 && score >= 15,
+    desc: '5-letter, ≥12 pts',
+    validate: ({ word, score }) => word.length === 5 && score >= 12,
   },
   {
     id: 'wild',
