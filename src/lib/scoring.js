@@ -68,7 +68,7 @@ export const CATEGORIES = [
   {
     id: 'lexicon',
     name: 'Lexicon',
-    desc: 'all 5 dice used',
+    desc: 'all dice used',
     validate: ({ word, faces }) => isSpellableFromFaces(word, faces).usedAll,
   },
   {

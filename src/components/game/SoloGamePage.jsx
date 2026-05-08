@@ -10,7 +10,7 @@ import {
 import AvatarMenu from '../lobby/AvatarMenu.jsx'
 import HeaderRight from '../HeaderRight.jsx'
 import { DICE, DIE_COUNT, ROLLS_PER_TURN, rollDice } from '../../lib/dice.js'
-import { CATEGORIES, wordScore, isSpellableFromFaces } from '../../lib/scoring.js'
+import { CATEGORIES, wordScore, isSpellableFromFaces, LETTER_VALUES } from '../../lib/scoring.js'
 import { rngFromSeed } from '../../lib/rng.js'
 import { loadDictionary, isValidWord } from '../../lib/dictionary.js'
 
@@ -68,6 +68,9 @@ export default function SoloGamePage({ session, profile, isAdmin }) {
   const [state, setState] = useState(() => loadState(userId, gameId) || makeInitialState())
   const [dictReady, setDictReady] = useState(false)
   const [dict, setDict] = useState(null)
+  // Per-die animation flag — set true when a die is mid-roll, cleared 500ms
+  // later. Drives the .die-rolling CSS keyframe in index.css.
+  const [animating, setAnimating] = useState(() => new Array(DIE_COUNT).fill(false))
 
   useEffect(() => {
     loadDictionary().then(set => { setDict(set); setDictReady(true) })
@@ -91,19 +94,17 @@ export default function SoloGamePage({ session, profile, isAdmin }) {
     if (state.doneRolling) return
     if (state.rollsThisTurn >= ROLLS_PER_TURN) return
     const nextRollNum = state.rollsThisTurn + 1
-    // Rolling re-rolls all unlocked dice. The first roll of a turn ignores
-    // `kept` (everything is fresh). After roll 1, kept[] is honored.
     const kept = state.rollsThisTurn === 0 ? new Array(DIE_COUNT).fill(false) : state.kept
     const newFaces = rollForTurn(seedBase, state.turn, nextRollNum, state.faces, kept)
+    // Trigger the tumble animation only on dice that are actually re-rolling.
+    setAnimating(kept.map(k => !k))
+    setTimeout(() => setAnimating(new Array(DIE_COUNT).fill(false)), 500)
     setState(s => ({
       ...s,
       faces: newFaces,
       rollsThisTurn: nextRollNum,
-      // After the final roll there's no more locking/rolling — auto-enter spelling phase.
       doneRolling: nextRollNum >= ROLLS_PER_TURN,
-      // After a fresh first roll, no dice are locked yet.
       kept: nextRollNum === 1 ? new Array(DIE_COUNT).fill(false) : s.kept,
-      // Reset builder when dice change.
       used: new Array(DIE_COUNT).fill(false),
       builder: [],
     }))
@@ -370,19 +371,24 @@ export default function SoloGamePage({ session, profile, isAdmin }) {
                   ? 'Tap dice to spell a word'
                   : 'Tap dice to lock — they\'ll keep their letter on re-roll'}
             </div>
-            <div className="flex justify-center gap-2 mb-3">
+            <div className="flex justify-center gap-1.5 mb-3">
               {state.faces.map((face, i) => {
                 const locked = state.kept[i]
                 const used = state.used[i]
                 const empty = face == null
                 const inRollPhase = !state.doneRolling
+                const isRolling = animating[i]
+                const value = face ? LETTER_VALUES[face] : null
                 return (
                   <button
                     key={i}
                     type="button"
                     onClick={() => empty ? null : tapDie(i)}
                     disabled={empty || (state.doneRolling && used)}
-                    className={`relative w-12 h-12 rounded-lg font-display text-xl flex items-center justify-center border-2 transition ${
+                    style={{ perspective: '400px' }}
+                    className={`relative w-11 h-11 rounded-lg font-display text-xl flex items-center justify-center border-2 ${
+                      isRolling ? 'die-rolling' : ''
+                    } ${
                       empty
                         ? 'border-dashed border-white/20 opacity-40'
                         : used
@@ -392,7 +398,12 @@ export default function SoloGamePage({ session, profile, isAdmin }) {
                             : 'border-white/20 bg-wordy-900/40 hover:border-wordy-400'
                     }`}
                   >
-                    {face ?? '·'}
+                    <span className="leading-none">{face ?? '·'}</span>
+                    {value != null && (
+                      <span className="absolute bottom-0.5 right-1 text-[9px] font-bold leading-none opacity-70">
+                        {value}
+                      </span>
+                    )}
                     {locked && inRollPhase && (
                       <span className="absolute -top-1 -right-1 w-3 h-3 rounded-full bg-amber-400 border-2 border-bg" />
                     )}

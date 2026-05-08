@@ -8,3 +8,15 @@
  * Shared SQ design system (body, .card, .btn-*, .tile, .dropdown-surface,
  * scrollbar, dark mode block) is imported above. Anything Yahdle-only
  * lives here. */
+
+/* Roll animation — applied to each die that is being re-rolled. The 3D
+ * rotateX gives the cube-tumble feel; the small mid-animation scale
+ * makes the spin read clearly even at 48px. */
+@keyframes yahdle-die-roll {
+  0%   { transform: rotateX(0deg)   scale(1); }
+  40%  { transform: rotateX(540deg) scale(0.78); opacity: 0.7; }
+  100% { transform: rotateX(1080deg) scale(1); opacity: 1; }
+}
+.die-rolling {
+  animation: yahdle-die-roll 0.5s ease-out;
+}
