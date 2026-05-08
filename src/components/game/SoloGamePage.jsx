@@ -20,6 +20,7 @@ function makeInitialState() {
   return {
     turn: 1,
     rollsThisTurn: 0,
+    doneRolling: false, // true → spelling phase: tap = add to word, no more rolls/locks
     faces: new Array(DIE_COUNT).fill(null),
     kept: new Array(DIE_COUNT).fill(false),
     used: new Array(DIE_COUNT).fill(false), // dice consumed by current word builder
@@ -87,10 +88,8 @@ export default function SoloGamePage({ session, profile, isAdmin }) {
 
   function handleRoll() {
     if (isGameOver) return
-    if (state.rollsThisTurn >= ROLLS_PER_TURN) {
-      toast.error('No rolls left this turn — score a category')
-      return
-    }
+    if (state.doneRolling) return
+    if (state.rollsThisTurn >= ROLLS_PER_TURN) return
     const nextRollNum = state.rollsThisTurn + 1
     // Rolling re-rolls all unlocked dice. The first roll of a turn ignores
     // `kept` (everything is fresh). After roll 1, kept[] is honored.
@@ -100,25 +99,36 @@ export default function SoloGamePage({ session, profile, isAdmin }) {
       ...s,
       faces: newFaces,
       rollsThisTurn: nextRollNum,
-      kept: nextRollNum === 0 ? new Array(DIE_COUNT).fill(false) : s.kept,
-      // Reset builder when dice change (faces changed → previous word is stale)
+      // After the final roll there's no more locking/rolling — auto-enter spelling phase.
+      doneRolling: nextRollNum >= ROLLS_PER_TURN,
+      // After a fresh first roll, no dice are locked yet.
+      kept: nextRollNum === 1 ? new Array(DIE_COUNT).fill(false) : s.kept,
+      // Reset builder when dice change.
       used: new Array(DIE_COUNT).fill(false),
       builder: [],
     }))
   }
 
-  function toggleLock(i) {
-    if (state.rollsThisTurn === 0) return // can't lock before rolling
-    if (state.rollsThisTurn >= ROLLS_PER_TURN) return // no point locking, no more rolls
-    setState(s => {
-      const kept = s.kept.slice()
-      kept[i] = !kept[i]
-      return { ...s, kept }
-    })
+  function handleDoneRolling() {
+    if (state.rollsThisTurn === 0) return
+    setState(s => ({ ...s, doneRolling: true }))
   }
 
+  // In rolling phase, tapping a die toggles its lock. In spelling phase,
+  // tapping adds the die's letter to the word builder (one-shot per die).
   function tapDie(i) {
     if (state.rollsThisTurn === 0) return
+    if (state.faces[i] == null) return
+    if (!state.doneRolling) {
+      // Locking is pointless on the very last roll, but harmless — disable on UI side instead.
+      setState(s => {
+        const kept = s.kept.slice()
+        kept[i] = !kept[i]
+        return { ...s, kept }
+      })
+      return
+    }
+    // Spelling phase
     if (state.used[i]) return
     if (state.builder.length >= DIE_COUNT) return
     setState(s => {
@@ -183,6 +193,7 @@ export default function SoloGamePage({ session, profile, isAdmin }) {
       scores: { ...s.scores, [categoryId]: { word: builderWord, score: builderScore } },
       turn: nextTurn,
       rollsThisTurn: 0,
+      doneRolling: false,
       faces: new Array(DIE_COUNT).fill(null),
       kept: new Array(DIE_COUNT).fill(false),
       used: new Array(DIE_COUNT).fill(false),
@@ -199,6 +210,7 @@ export default function SoloGamePage({ session, profile, isAdmin }) {
       scores: { ...s.scores, [categoryId]: { word: '', score: 0 } },
       turn: s.turn + 1,
       rollsThisTurn: 0,
+      doneRolling: false,
       faces: new Array(DIE_COUNT).fill(null),
       kept: new Array(DIE_COUNT).fill(false),
       used: new Array(DIE_COUNT).fill(false),
@@ -278,8 +290,8 @@ export default function SoloGamePage({ session, profile, isAdmin }) {
           </div>
         </div>
 
-        {/* Word builder */}
-        {!isGameOver && (
+        {/* Word builder — only in spelling phase */}
+        {!isGameOver && state.doneRolling && (
           <div className="card p-3">
             <div className="text-xs uppercase tracking-wide opacity-70 mb-2">Your word</div>
             <div className="min-h-[40px] flex flex-wrap gap-1.5 mb-2">
@@ -308,49 +320,69 @@ export default function SoloGamePage({ session, profile, isAdmin }) {
           </div>
         )}
 
-        {/* Dice + roll */}
+        {/* Dice + roll/spell controls */}
         {!isGameOver && (
           <div className="card p-3">
+            <div className="text-xs uppercase tracking-wide opacity-70 mb-2 text-center">
+              {state.rollsThisTurn === 0
+                ? 'Roll the dice'
+                : state.doneRolling
+                  ? 'Tap dice to spell a word'
+                  : 'Tap dice to lock — they\'ll keep their letter on re-roll'}
+            </div>
             <div className="flex justify-center gap-2 mb-3">
               {state.faces.map((face, i) => {
                 const locked = state.kept[i]
                 const used = state.used[i]
                 const empty = face == null
+                const inRollPhase = !state.doneRolling
                 return (
                   <button
                     key={i}
                     type="button"
                     onClick={() => empty ? null : tapDie(i)}
-                    onDoubleClick={() => empty ? null : toggleLock(i)}
-                    disabled={empty || used}
+                    disabled={empty || (state.doneRolling && used)}
                     className={`relative w-12 h-12 rounded-lg font-display text-xl flex items-center justify-center border-2 transition ${
                       empty
                         ? 'border-dashed border-white/20 opacity-40'
                         : used
                           ? 'border-white/10 opacity-30'
-                          : locked
+                          : locked && inRollPhase
                             ? 'border-amber-400 bg-amber-900/40 text-amber-200 shadow-[0_0_12px_rgba(212,160,84,0.35)]'
                             : 'border-white/20 bg-wordy-900/40 hover:border-wordy-400'
                     }`}
                   >
                     {face ?? '·'}
-                    {locked && (
+                    {locked && inRollPhase && (
                       <span className="absolute -top-1 -right-1 w-3 h-3 rounded-full bg-amber-400 border-2 border-bg" />
                     )}
                   </button>
                 )
               })}
             </div>
-            <div className="flex items-center justify-center gap-3">
-              <SQButton variant="primary" onClick={handleRoll} disabled={state.rollsThisTurn >= ROLLS_PER_TURN}>
-                {state.rollsThisTurn === 0 ? 'Roll' : 'Re-roll'}
-              </SQButton>
-              <span className="text-xs opacity-70">
-                Roll {Math.min(state.rollsThisTurn + 1, ROLLS_PER_TURN)} of {ROLLS_PER_TURN}
-              </span>
-            </div>
-            {state.rollsThisTurn > 0 && state.rollsThisTurn < ROLLS_PER_TURN && (
-              <p className="text-[10px] text-center opacity-50 mt-2">double-tap a die to lock it</p>
+            {!state.doneRolling && (
+              <div className="flex items-center justify-center gap-3">
+                <SQButton
+                  variant="primary"
+                  onClick={handleRoll}
+                  disabled={state.rollsThisTurn >= ROLLS_PER_TURN}
+                >
+                  {state.rollsThisTurn === 0 ? 'Roll' : 'Re-roll'}
+                </SQButton>
+                {state.rollsThisTurn > 0 && (
+                  <SQButton variant="secondary" onClick={handleDoneRolling}>
+                    Done rolling
+                  </SQButton>
+                )}
+                <span className="text-xs opacity-70">
+                  Roll {Math.min(state.rollsThisTurn + 1, ROLLS_PER_TURN)} of {ROLLS_PER_TURN}
+                </span>
+              </div>
+            )}
+            {state.doneRolling && (
+              <p className="text-[11px] text-center opacity-60">
+                Build your word, then tap a category cell to score.
+              </p>
             )}
           </div>
         )}
