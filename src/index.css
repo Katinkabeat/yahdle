@@ -1,0 +1,10 @@
+@import '../../rae-side-quest/packages/sq-ui/globals.css';
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ── Yahdle-specific styles below this line ──
+ * Shared SQ design system (body, .card, .btn-*, .tile, .dropdown-surface,
+ * scrollbar, dark mode block) is imported above. Anything Yahdle-only
+ * lives here. */

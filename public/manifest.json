@@ -1,0 +1,19 @@
+{
+  "name": "Yahdle",
+  "short_name": "Yahdle",
+  "description": "Push-your-luck daily word-dice game",
+  "start_url": "/yahdle/",
+  "scope": "/yahdle/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "theme_color": "#7c3aed",
+  "background_color": "#faf5ff",
+  "icons": [
+    {
+      "src": "favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

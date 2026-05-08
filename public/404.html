@@ -1,0 +1,25 @@
+<!doctype html>
+<!--
+  GitHub Pages SPA redirect: when a deep link like /yahdle/game/abc 404s,
+  this page rewrites the URL into a query string the index.html script
+  can decode back into the original path. Keeps client routing working
+  on a static host that doesn't know about React Router.
+-->
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Yahdle</title>
+    <script type="text/javascript">
+      var pathSegmentsToKeep = 1; // /yahdle/ is one segment
+      var l = window.location;
+      l.replace(
+        l.protocol + '//' + l.hostname + (l.port ? ':' + l.port : '') +
+        l.pathname.split('/').slice(0, 1 + pathSegmentsToKeep).join('/') + '/?/' +
+        l.pathname.slice(1).split('/').slice(pathSegmentsToKeep).join('/').replace(/&/g, '~and~') +
+        (l.search ? '&' + l.search.slice(1).replace(/&/g, '~and~') : '') +
+        l.hash
+      );
+    </script>
+  </head>
+  <body></body>
+</html>
