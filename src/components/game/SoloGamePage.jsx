@@ -20,10 +20,11 @@ function makeInitialState() {
   return {
     turn: 1,
     rollsThisTurn: 0,
-    doneRolling: false, // true → spelling phase: tap = add to word, no more rolls/locks
+    // faces[i] = current face of die i (null before first roll).
     faces: new Array(DIE_COUNT).fill(null),
-    kept: new Array(DIE_COUNT).fill(false),
-    used: new Array(DIE_COUNT).fill(false), // dice consumed by current word builder
+    // builder = ordered list of dice currently in the word area.
+    // A die in the builder is locked (re-rolls skip it) and contributes
+    // its letter to the word in builder-order.
     builder: [], // [{ letter, dieIdx }]
     scores: {}, // { categoryId: { word, score } }
   }
@@ -48,11 +49,13 @@ function saveState(userId, gameId, state) {
 }
 
 // Roll dice for (turn, rollNumber). Each (turn, roll, die) triple has its
-// own deterministic seed so unlock decisions don't shift other dice.
-function rollForTurn(seedBase, turn, rollNumber, prevFaces, kept) {
+// own deterministic seed so a player's word-area choices don't shift
+// other dice. `skip[i] === true` means die i keeps its current face
+// (it's parked in the word area).
+function rollForTurn(seedBase, turn, rollNumber, prevFaces, skip) {
   const next = prevFaces.slice()
   for (let i = 0; i < DIE_COUNT; i++) {
-    if (kept[i] && prevFaces[i] != null) continue
+    if (skip[i] && prevFaces[i] != null) continue
     const rng = rngFromSeed(`${seedBase}:t${turn}:r${rollNumber}:d${i}`)
     next[i] = DICE[i][Math.floor(rng() * DICE[i].length)]
   }
@@ -89,74 +92,80 @@ export default function SoloGamePage({ session, profile, isAdmin }) {
   const builderWord = state.builder.map(b => b.letter).join('')
   const builderScore = wordScore(builderWord)
 
+  // Lookup: which dice are currently in the word area (skip on re-roll).
+  const inBuilder = useMemo(() => {
+    const set = new Set(state.builder.map(b => b.dieIdx))
+    return new Array(DIE_COUNT).fill(false).map((_, i) => set.has(i))
+  }, [state.builder])
+
+  // Selected-for-swap state: which builder letter is highlighted, awaiting
+  // a second tap on another letter to swap with. null = nothing selected.
+  const [swapIdx, setSwapIdx] = useState(null)
+
+  // Inline-confirm state: which category is asking for a 0.
+  const [zeroAskCategory, setZeroAskCategory] = useState(null)
+
   function handleRoll() {
     if (isGameOver) return
-    if (state.doneRolling) return
     if (state.rollsThisTurn >= ROLLS_PER_TURN) return
+    // If every die is parked in the word area there's nothing to roll.
+    if (inBuilder.every(Boolean)) return
     const nextRollNum = state.rollsThisTurn + 1
-    const kept = state.rollsThisTurn === 0 ? new Array(DIE_COUNT).fill(false) : state.kept
-    const newFaces = rollForTurn(seedBase, state.turn, nextRollNum, state.faces, kept)
-    // Trigger the tumble animation only on dice that are actually re-rolling.
-    setAnimating(kept.map(k => !k))
+    const newFaces = rollForTurn(seedBase, state.turn, nextRollNum, state.faces, inBuilder)
+    // Animate only the dice that actually re-rolled.
+    setAnimating(inBuilder.map(b => !b))
     setTimeout(() => setAnimating(new Array(DIE_COUNT).fill(false)), 500)
     setState(s => ({
       ...s,
       faces: newFaces,
       rollsThisTurn: nextRollNum,
-      doneRolling: nextRollNum >= ROLLS_PER_TURN,
-      kept: nextRollNum === 1 ? new Array(DIE_COUNT).fill(false) : s.kept,
-      used: new Array(DIE_COUNT).fill(false),
-      builder: [],
     }))
   }
 
-  function handleDoneRolling() {
-    if (state.rollsThisTurn === 0) return
-    setState(s => ({ ...s, doneRolling: true }))
+  // Tap a die in the rack → move it (and its letter) into the word area.
+  function tapRackDie(i) {
+    if (state.faces[i] == null) return
+    if (inBuilder[i]) return
+    if (state.builder.length >= DIE_COUNT) return
+    setState(s => ({
+      ...s,
+      builder: [...s.builder, { letter: s.faces[i], dieIdx: i }],
+    }))
   }
 
-  // In rolling phase, tapping a die toggles its lock. In spelling phase,
-  // tapping adds the die's letter to the word builder (one-shot per die).
-  function tapDie(i) {
-    if (state.rollsThisTurn === 0) return
-    if (state.faces[i] == null) return
-    if (!state.doneRolling) {
-      // Locking is pointless on the very last roll, but harmless — disable on UI side instead.
-      setState(s => {
-        const kept = s.kept.slice()
-        kept[i] = !kept[i]
-        return { ...s, kept }
-      })
+  // Tap a letter in the word area. Either selects it for swap, or
+  // completes a pending swap.
+  function tapBuilderLetter(idx) {
+    if (swapIdx == null) {
+      setSwapIdx(idx)
       return
     }
-    // Spelling phase
-    if (state.used[i]) return
-    if (state.builder.length >= DIE_COUNT) return
+    if (swapIdx === idx) {
+      setSwapIdx(null)
+      return
+    }
     setState(s => {
-      const used = s.used.slice()
-      used[i] = true
-      return { ...s, used, builder: [...s.builder, { letter: s.faces[i], dieIdx: i }] }
+      const builder = s.builder.slice()
+      ;[builder[swapIdx], builder[idx]] = [builder[idx], builder[swapIdx]]
+      return { ...s, builder }
     })
+    setSwapIdx(null)
   }
 
-  function popLetter(builderIdx) {
-    setState(s => {
-      const removed = s.builder[builderIdx]
-      if (!removed) return s
-      const used = s.used.slice()
-      used[removed.dieIdx] = false
-      const builder = s.builder.slice(0, builderIdx).concat(s.builder.slice(builderIdx + 1))
-      return { ...s, used, builder }
-    })
+  // Remove a letter from the word area → its die returns to the rack at
+  // its current face. Sits there until the next Re-roll.
+  function removeBuilderLetter(idx) {
+    setState(s => ({
+      ...s,
+      builder: s.builder.slice(0, idx).concat(s.builder.slice(idx + 1)),
+    }))
+    setSwapIdx(null)
   }
 
   function clearBuilder() {
-    setState(s => ({ ...s, builder: [], used: new Array(DIE_COUNT).fill(false) }))
+    setState(s => ({ ...s, builder: [] }))
+    setSwapIdx(null)
   }
-
-  // Inline-confirm state: which category is asking the player to take a 0.
-  // null = no pending confirm. The cell itself renders the Yes/No prompt.
-  const [zeroAskCategory, setZeroAskCategory] = useState(null)
 
   function applyScore(categoryId, word, score) {
     setState(s => ({
@@ -164,13 +173,11 @@ export default function SoloGamePage({ session, profile, isAdmin }) {
       scores: { ...s.scores, [categoryId]: { word, score } },
       turn: s.turn + 1,
       rollsThisTurn: 0,
-      doneRolling: false,
       faces: new Array(DIE_COUNT).fill(null),
-      kept: new Array(DIE_COUNT).fill(false),
-      used: new Array(DIE_COUNT).fill(false),
       builder: [],
     }))
     setZeroAskCategory(null)
+    setSwapIdx(null)
   }
 
   // Tap on a category cell. Either scores the current word (if it fits)
@@ -328,28 +335,52 @@ export default function SoloGamePage({ session, profile, isAdmin }) {
         {/* Word builder — always visible so layout doesn't shift */}
         {!isGameOver && (
           <div className="card p-3">
-            <div className="text-xs uppercase tracking-wide opacity-70 mb-2">Your word</div>
-            <div className="min-h-[40px] flex flex-wrap gap-1.5 mb-2">
+            <div className="flex items-center justify-between mb-2">
+              <div className="text-xs uppercase tracking-wide opacity-70">Your word</div>
+              {state.builder.length > 1 && (
+                <span className="text-[10px] opacity-50">tap two letters to swap</span>
+              )}
+            </div>
+            <div className="min-h-[44px] flex flex-wrap items-center gap-1.5 mb-2">
               {state.builder.length === 0 ? (
                 <span className="text-sm opacity-50 self-center">
-                  {state.doneRolling
-                    ? 'Tap dice below to build a word'
-                    : state.rollsThisTurn === 0
-                      ? 'Roll the dice to start'
-                      : 'Lock keepers, then tap "Done rolling"'}
+                  {state.rollsThisTurn === 0
+                    ? 'Roll the dice to start'
+                    : 'Tap dice below to add letters here'}
                 </span>
               ) : (
-                state.builder.map((b, i) => (
-                  <button
-                    key={i}
-                    type="button"
-                    onClick={() => popLetter(i)}
-                    className="font-display text-xl bg-wordy-700 text-white rounded px-2 py-1 min-w-[32px]"
-                    title="Remove"
-                  >
-                    {b.letter}
-                  </button>
-                ))
+                state.builder.map((b, i) => {
+                  const selected = swapIdx === i
+                  const value = LETTER_VALUES[b.letter]
+                  return (
+                    <div key={i} className="relative">
+                      <button
+                        type="button"
+                        onClick={() => tapBuilderLetter(i)}
+                        className={`relative font-display text-xl rounded px-2 py-1 min-w-[36px] border-2 transition ${
+                          selected
+                            ? 'border-amber-400 bg-amber-700 text-amber-100'
+                            : 'border-transparent bg-wordy-700 text-white'
+                        }`}
+                      >
+                        <span className="leading-none">{b.letter}</span>
+                        {value != null && (
+                          <span className="absolute bottom-0.5 right-1 text-[9px] font-bold leading-none opacity-70">
+                            {value}
+                          </span>
+                        )}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => removeBuilderLetter(i)}
+                        aria-label="Remove letter"
+                        className="absolute -top-1.5 -right-1.5 w-4 h-4 rounded-full bg-wordy-900 border border-white/30 text-[10px] leading-none flex items-center justify-center hover:bg-red-700"
+                      >
+                        ×
+                      </button>
+                    </div>
+                  )
+                })
               )}
             </div>
             <div className="flex justify-between items-center text-xs opacity-70">
@@ -361,84 +392,62 @@ export default function SoloGamePage({ session, profile, isAdmin }) {
           </div>
         )}
 
-        {/* Dice + roll/spell controls */}
+        {/* Rack + Roll button. Dice in the word area show as faded
+            placeholders so the rack keeps a stable 6-slot layout. */}
         {!isGameOver && (
           <div className="card p-3">
             <div className="text-xs uppercase tracking-wide opacity-70 mb-2 text-center">
               {state.rollsThisTurn === 0
                 ? 'Roll the dice'
-                : state.doneRolling
-                  ? 'Tap dice to spell a word'
-                  : 'Tap dice to lock — they\'ll keep their letter on re-roll'}
+                : 'Tap a die to move it into your word'}
             </div>
             <div className="flex justify-center gap-1.5 mb-3">
               {state.faces.map((face, i) => {
-                const locked = state.kept[i]
-                const used = state.used[i]
                 const empty = face == null
-                const inRollPhase = !state.doneRolling
+                const parked = inBuilder[i]
                 const isRolling = animating[i]
                 const value = face ? LETTER_VALUES[face] : null
                 return (
                   <button
                     key={i}
                     type="button"
-                    onClick={() => empty ? null : tapDie(i)}
-                    disabled={empty || (state.doneRolling && used)}
+                    onClick={() => empty || parked ? null : tapRackDie(i)}
+                    disabled={empty || parked}
                     style={{ perspective: '400px' }}
                     className={`relative w-11 h-11 rounded-lg font-display text-xl flex items-center justify-center border-2 ${
                       isRolling ? 'die-rolling' : ''
                     } ${
                       empty
                         ? 'border-dashed border-white/20 opacity-40'
-                        : used
-                          ? 'border-white/10 opacity-30'
-                          : locked && inRollPhase
-                            ? 'border-amber-400 bg-amber-900/40 text-amber-200 shadow-[0_0_12px_rgba(212,160,84,0.35)]'
-                            : 'border-white/20 bg-wordy-900/40 hover:border-wordy-400'
+                        : parked
+                          ? 'border-dashed border-amber-400/40 opacity-30'
+                          : 'border-white/20 bg-wordy-900/40 hover:border-wordy-400'
                     }`}
                   >
-                    <span className="leading-none">{face ?? '·'}</span>
-                    {value != null && (
+                    <span className="leading-none">{parked ? '·' : face ?? '·'}</span>
+                    {value != null && !parked && (
                       <span className="absolute bottom-0.5 right-1 text-[9px] font-bold leading-none opacity-70">
                         {value}
                       </span>
-                    )}
-                    {locked && inRollPhase && (
-                      <span className="absolute -top-1 -right-1 w-3 h-3 rounded-full bg-amber-400 border-2 border-bg" />
                     )}
                   </button>
                 )
               })}
             </div>
-            {/* Action row — always rendered at the same height so the dice
-                card doesn't shrink when buttons go away. */}
             <div className="flex items-center justify-center gap-3 min-h-[44px]">
-              {!state.doneRolling ? (
-                <>
-                  <SQButton
-                    variant="primary"
-                    onClick={handleRoll}
-                    disabled={state.rollsThisTurn >= ROLLS_PER_TURN}
-                  >
-                    {state.rollsThisTurn === 0 ? 'Roll' : 'Re-roll'}
-                  </SQButton>
-                  <SQButton
-                    variant="secondary"
-                    onClick={handleDoneRolling}
-                    disabled={state.rollsThisTurn === 0}
-                  >
-                    Done rolling
-                  </SQButton>
-                  <span className="text-xs opacity-70 whitespace-nowrap">
-                    Roll {Math.min(state.rollsThisTurn + 1, ROLLS_PER_TURN)}/{ROLLS_PER_TURN}
-                  </span>
-                </>
-              ) : (
-                <span className="text-xs opacity-70 text-center">
-                  Build your word, then tap a category to score.
-                </span>
-              )}
+              <SQButton
+                variant="primary"
+                onClick={handleRoll}
+                disabled={
+                  state.rollsThisTurn >= ROLLS_PER_TURN ||
+                  inBuilder.every(Boolean)
+                }
+              >
+                {state.rollsThisTurn === 0 ? 'Roll' : 'Re-roll'}
+              </SQButton>
+              <span className="text-xs opacity-70 whitespace-nowrap">
+                Roll {Math.min(state.rollsThisTurn + 1, ROLLS_PER_TURN)}/{ROLLS_PER_TURN}
+              </span>
             </div>
           </div>
         )}
