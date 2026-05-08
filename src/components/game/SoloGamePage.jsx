@@ -411,30 +411,35 @@ export default function SoloGamePage({ session, profile, isAdmin }) {
                 )
               })}
             </div>
-            {!state.doneRolling && (
-              <div className="flex items-center justify-center gap-3">
-                <SQButton
-                  variant="primary"
-                  onClick={handleRoll}
-                  disabled={state.rollsThisTurn >= ROLLS_PER_TURN}
-                >
-                  {state.rollsThisTurn === 0 ? 'Roll' : 'Re-roll'}
-                </SQButton>
-                {state.rollsThisTurn > 0 && (
-                  <SQButton variant="secondary" onClick={handleDoneRolling}>
+            {/* Action row — always rendered at the same height so the dice
+                card doesn't shrink when buttons go away. */}
+            <div className="flex items-center justify-center gap-3 min-h-[44px]">
+              {!state.doneRolling ? (
+                <>
+                  <SQButton
+                    variant="primary"
+                    onClick={handleRoll}
+                    disabled={state.rollsThisTurn >= ROLLS_PER_TURN}
+                  >
+                    {state.rollsThisTurn === 0 ? 'Roll' : 'Re-roll'}
+                  </SQButton>
+                  <SQButton
+                    variant="secondary"
+                    onClick={handleDoneRolling}
+                    disabled={state.rollsThisTurn === 0}
+                  >
                     Done rolling
                   </SQButton>
-                )}
-                <span className="text-xs opacity-70">
-                  Roll {Math.min(state.rollsThisTurn + 1, ROLLS_PER_TURN)} of {ROLLS_PER_TURN}
+                  <span className="text-xs opacity-70 whitespace-nowrap">
+                    Roll {Math.min(state.rollsThisTurn + 1, ROLLS_PER_TURN)}/{ROLLS_PER_TURN}
+                  </span>
+                </>
+              ) : (
+                <span className="text-xs opacity-70 text-center">
+                  Build your word, then tap a category to score.
                 </span>
-              </div>
-            )}
-            {state.doneRolling && (
-              <p className="text-[11px] text-center opacity-60">
-                Build your word, then tap a category cell to score.
-              </p>
-            )}
+              )}
+            </div>
           </div>
         )}
 
