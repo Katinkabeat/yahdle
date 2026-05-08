@@ -66,7 +66,17 @@ export default function SoloGamePage({ session, profile, isAdmin }) {
   const { gameId } = useParams() // YMD string, e.g. "2026-05-07"
   const navigate = useNavigate()
   const userId = session.user.id
-  const seedBase = `yahdle:daily:${gameId}`
+
+  // Admin-only seed salt: wiped on a normal day, but the Reset button sets
+  // a random value so each reset rolls fresh dice for playtesting. Lives
+  // in localStorage so reloads keep the same variant until the next reset.
+  const saltKey = `yahdle:salt:${userId}:${gameId}`
+  const [resetSalt, setResetSalt] = useState(() => {
+    try { return localStorage.getItem(saltKey) || '' } catch { return '' }
+  })
+  const seedBase = resetSalt
+    ? `yahdle:daily:${gameId}:${resetSalt}`
+    : `yahdle:daily:${gameId}`
 
   const [state, setState] = useState(() => loadState(userId, gameId) || makeInitialState())
   const [dictReady, setDictReady] = useState(false)
@@ -249,12 +259,17 @@ export default function SoloGamePage({ session, profile, isAdmin }) {
               <button
                 type="button"
                 onClick={() => {
-                  if (!confirm('Reset today’s game? Your progress will be lost.')) return
-                  localStorage.removeItem(storageKey(userId, gameId))
+                  if (!confirm('Reset with fresh dice? Progress wipes too.')) return
+                  const newSalt = Math.random().toString(36).slice(2, 10)
+                  try {
+                    localStorage.setItem(saltKey, newSalt)
+                    localStorage.removeItem(storageKey(userId, gameId))
+                  } catch {}
+                  setResetSalt(newSalt)
                   setState(makeInitialState())
                 }}
                 className="text-xs font-bold px-2 py-1 rounded border border-amber-400/60 text-amber-300 hover:bg-amber-400/10"
-                title="Admin-only: wipe today's saved game"
+                title="Admin-only: wipe save and roll a fresh daily variant"
               >
                 ↻ Reset
               </button>
