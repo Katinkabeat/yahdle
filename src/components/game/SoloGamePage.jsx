@@ -154,10 +154,7 @@ export default function SoloGamePage({ session, profile, isAdmin }) {
   }
 
   function tryScore(categoryId) {
-    if (state.scores[categoryId]) {
-      toast.error('Already filled')
-      return
-    }
+    if (state.scores[categoryId]) return
     if (!builderWord) {
       toast.error('Build a word from the dice first')
       return
@@ -181,17 +178,15 @@ export default function SoloGamePage({ session, profile, isAdmin }) {
       toast.error(`"${builderWord}" doesn't fit ${cat.name}`)
       return
     }
-    // Lexicon requires using all 5 dice — extra check
     if (categoryId === 'lexicon' && !isSpellableFromFaces(builderWord, state.faces).usedAll) {
       toast.error('Lexicon needs all 5 dice')
       return
     }
-    // Score the category. Move to next turn.
-    const nextTurn = state.turn + 1
+    if (!confirm(`Score ${builderWord} in ${cat.name} for ${builderScore} pts?`)) return
     setState(s => ({
       ...s,
       scores: { ...s.scores, [categoryId]: { word: builderWord, score: builderScore } },
-      turn: nextTurn,
+      turn: s.turn + 1,
       rollsThisTurn: 0,
       doneRolling: false,
       faces: new Array(DIE_COUNT).fill(null),
@@ -204,7 +199,8 @@ export default function SoloGamePage({ session, profile, isAdmin }) {
 
   function scoreZero(categoryId) {
     if (state.scores[categoryId]) return
-    if (!confirm(`Take a 0 in ${CATEGORIES.find(c => c.id === categoryId).name}?`)) return
+    const cat = CATEGORIES.find(c => c.id === categoryId)
+    if (!confirm(`Take a 0 in ${cat.name}?`)) return
     setState(s => ({
       ...s,
       scores: { ...s.scores, [categoryId]: { word: '', score: 0 } },
@@ -269,7 +265,9 @@ export default function SoloGamePage({ session, profile, isAdmin }) {
                   key={cat.id}
                   type="button"
                   onClick={() => tryScore(cat.id)}
+                  onDoubleClick={() => scoreZero(cat.id)}
                   disabled={!!filled || isGameOver}
+                  title={filled ? '' : 'Tap to score word here • Double-tap to take a 0'}
                   className={`text-left rounded-lg px-2 py-1.5 border text-xs transition ${
                     filled
                       ? 'border-green-600/40 bg-green-900/20 cursor-default'
@@ -290,13 +288,19 @@ export default function SoloGamePage({ session, profile, isAdmin }) {
           </div>
         </div>
 
-        {/* Word builder — only in spelling phase */}
-        {!isGameOver && state.doneRolling && (
+        {/* Word builder — always visible so layout doesn't shift */}
+        {!isGameOver && (
           <div className="card p-3">
             <div className="text-xs uppercase tracking-wide opacity-70 mb-2">Your word</div>
             <div className="min-h-[40px] flex flex-wrap gap-1.5 mb-2">
               {state.builder.length === 0 ? (
-                <span className="text-sm opacity-50 self-center">Tap dice below to build a word</span>
+                <span className="text-sm opacity-50 self-center">
+                  {state.doneRolling
+                    ? 'Tap dice below to build a word'
+                    : state.rollsThisTurn === 0
+                      ? 'Roll the dice to start'
+                      : 'Lock keepers, then tap "Done rolling"'}
+                </span>
               ) : (
                 state.builder.map((b, i) => (
                   <button
@@ -385,19 +389,6 @@ export default function SoloGamePage({ session, profile, isAdmin }) {
               </p>
             )}
           </div>
-        )}
-
-        {!isGameOver && Object.keys(state.scores).length < TOTAL_TURNS && (
-          <details className="text-xs opacity-70">
-            <summary className="cursor-pointer">Stuck? Take a 0 in a category</summary>
-            <div className="grid grid-cols-2 gap-1 mt-2">
-              {CATEGORIES.filter(c => !state.scores[c.id]).map(cat => (
-                <button key={cat.id} onClick={() => scoreZero(cat.id)} className="underline text-left">
-                  0 → {cat.name}
-                </button>
-              ))}
-            </div>
-          </details>
         )}
 
         {isGameOver && (

@@ -1,15 +1,15 @@
-// 5 custom Boggle-style dice. Each die has 6 letter faces, balanced so
-// every roll has on average 2-3 vowels and at least one consonant. J/Q/X/Z
-// are excluded — too punishing for a 5-die daily.
+// 5 custom Boggle-style dice. Each die: 6 faces, 2 vowels + 4 consonants.
 //
-// 21 letters covered: A B C D E F G H I K L M N O P R S T U V W Y
-// Vowels per die: 2 / 3 / 3 / 3 / 2  (~43% vowel faces overall)
+// Top spelling letters (T R S N) are doubled across two different dice so
+// common 5-letter words like STARE, HEART, TEARS reliably remain
+// spellable even after locks. J/K/Q/X/Z dropped (too rare for a 5-die
+// daily). 20 letters total, 11 vowel faces (~37%).
 export const DICE = [
-  ['A', 'E', 'O', 'R', 'S', 'T'],
-  ['A', 'I', 'U', 'N', 'L', 'D'],
-  ['E', 'I', 'O', 'M', 'H', 'P'],
-  ['A', 'E', 'Y', 'C', 'F', 'G'],
-  ['I', 'U', 'B', 'W', 'K', 'V'],
+  ['A', 'E', 'T', 'R', 'N', 'B'],
+  ['I', 'O', 'S', 'T', 'L', 'M'],
+  ['E', 'U', 'R', 'N', 'H', 'C'],
+  ['A', 'I', 'S', 'P', 'G', 'F'],
+  ['E', 'O', 'U', 'D', 'W', 'Y'],
 ]
 
 export const DIE_COUNT = DICE.length
