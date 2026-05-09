@@ -14,6 +14,16 @@ Push-your-luck daily word-dice game
 
 ## Session log
 
+### 2026-05-09 — Solo daily streak
+
+Mirrored Snibble's streak pattern.
+
+- New table `public.yahdle_solo_results` (user_id, play_date, score, completed_at) with RLS — one row per user per Atlantic-time day. Migration: `supabase/migrations/yahdle_solo_streak.sql`. Applied via Management API.
+- New `src/hooks/useStreak.js` — copy of Snibble's hook, walks dates backward in Atlantic time. Streak doesn't break until midnight Atlantic passes (today empty + yesterday empty → 0).
+- `SoloGamePage` upserts a row when `isGameOver` flips true (sessionStorage guard prevents repeat upserts on state changes within the same session).
+- Streak badge on `SoloPlayCard`: `🔥 N` top-right, hidden when streak = 0. Same `bg-wordy-200 text-wordy-700` treatment as Snibble's lobby pet card.
+- Solo-only. MP work in parallel uses separate tables.
+
 ### 2026-05-08 — Scaffolded
 
 - Created from `rae-side-quest/templates/sq-game-starter/`

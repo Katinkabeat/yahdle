@@ -13,6 +13,7 @@ import { DICE, DIE_COUNT, ROLLS_PER_TURN, rollDice } from '../../lib/dice.js'
 import { CATEGORIES, wordScore, isSpellableFromFaces, LETTER_VALUES } from '../../lib/scoring.js'
 import { rngFromSeed } from '../../lib/rng.js'
 import { loadDictionary, isValidWord } from '../../lib/dictionary.js'
+import { supabase } from '../../lib/supabase.js'
 
 const TOTAL_TURNS = CATEGORIES.length
 
@@ -98,6 +99,31 @@ export default function SoloGamePage({ session, profile, isAdmin }) {
     () => Object.values(state.scores).reduce((sum, s) => sum + s.score, 0),
     [state.scores]
   )
+
+  // Record the daily completion in Supabase so it counts toward the streak.
+  // Upsert so admin Reset → replay doesn't error; gameId is the Atlantic
+  // YMD passed in via the route param.
+  useEffect(() => {
+    if (!isGameOver) return
+    let active = true
+    const recorded = sessionStorage.getItem(`yahdle:recorded:${userId}:${gameId}`)
+    if (recorded) return
+    supabase
+      .from('yahdle_solo_results')
+      .upsert(
+        { user_id: userId, play_date: gameId, score: totalScore },
+        { onConflict: 'user_id,play_date' }
+      )
+      .then(({ error }) => {
+        if (!active) return
+        if (error) {
+          console.error('[yahdle] failed to record solo result', error)
+          return
+        }
+        try { sessionStorage.setItem(`yahdle:recorded:${userId}:${gameId}`, '1') } catch {}
+      })
+    return () => { active = false }
+  }, [isGameOver, userId, gameId, totalScore])
 
   const builderWord = state.builder.map(b => b.letter).join('')
   const builderScore = wordScore(builderWord)

@@ -16,7 +16,7 @@ export default function LobbyPage({ session, profile, isAdmin }) {
         />
       }
     >
-      <SoloPlayCard />
+      <SoloPlayCard session={session} />
     </SQLobbyShell>
   )
 }
