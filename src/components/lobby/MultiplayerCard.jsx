@@ -63,73 +63,75 @@ export default function MultiplayerCard({
   return (
     <>
       <section className="card">
-        <div className="flex items-center justify-between mb-2">
-          <h2 className="font-display text-xl">🎮 Multiplayer</h2>
-          <button
-            type="button"
-            onClick={() => setSheetOpen(true)}
-            className="text-xs px-3 py-1.5 rounded-full border border-white/20 hover:border-white/40 font-semibold"
-          >
-            + New game
-          </button>
-        </div>
+        <h2 className="font-display text-xl text-wordy-700 mb-1">🎮 Multiplayer</h2>
+        <p className="text-sm opacity-80 mb-3">
+          Invite a friend, race to the highest 12-category total.
+        </p>
+        <button
+          type="button"
+          onClick={() => setSheetOpen(true)}
+          className="btn-primary mb-4"
+        >
+          ✨ Create Game
+        </button>
 
         {loading && <p className="text-sm opacity-60 text-center py-2">Loading…</p>}
 
-        {!loading && pendingInvites.length === 0 && sentInvites.length === 0 && yourTurn.length === 0 && waiting.length === 0 && (
-          <p className="text-sm opacity-60 text-center py-3">
+        {(pendingInvites.length === 0 && sentInvites.length === 0 && yourTurn.length === 0 && waiting.length === 0 && !loading) && (
+          <p className="text-sm text-wordy-400 text-center py-2">
             No active games — invite a friend to start one.
           </p>
         )}
 
         <div className="space-y-2">
-          {sentInvites.map(g => {
-            const opp = opponents[g.invited_user_id]
-            return (
-              <div
-                key={g.id}
-                className="rounded-xl border border-white/10 bg-white/[0.03] p-3 flex items-center justify-between"
-              >
-                <div>
-                  <div className="text-[11px] uppercase tracking-wide font-bold opacity-60">Invite sent</div>
-                  <div className="text-sm font-semibold">Waiting for {opp?.username ?? 'opponent'} to accept</div>
-                </div>
-                <button
-                  onClick={() => handleCancel(g.id)}
-                  className="text-xs px-3 py-1.5 rounded-full border border-white/20 hover:border-red-400/60 hover:text-red-300 text-white/70"
-                >
-                  Cancel
-                </button>
-              </div>
-            )
-          })}
-
           {pendingInvites.map(g => {
             const opp = opponentOf(g)
             return (
               <div
                 key={g.id}
-                className="rounded-xl border border-emerald-400/40 bg-emerald-400/10 p-3 flex items-center justify-between"
+                className="flex items-center justify-between rounded-xl px-3 py-2 border bg-wordy-50 border-wordy-100 dark:bg-[#1a1130] dark:border-[#2d1b55]"
               >
-                <div>
-                  <div className="text-[11px] uppercase tracking-wide font-bold text-emerald-300">Invite</div>
-                  <div className="text-sm font-semibold">{opp?.username ?? 'Someone'} invited you</div>
+                <div className="min-w-0">
+                  <div className="text-sm font-semibold truncate">{opp?.username ?? 'Someone'}</div>
+                  <p className="text-xs text-wordy-400 mt-0.5">📨 invited you to a game</p>
                 </div>
-                <div className="flex gap-1.5">
+                <div className="flex gap-1.5 shrink-0">
                   <button
                     onClick={() => handleAccept(g.id)}
-                    className="text-xs px-3 py-1.5 rounded-full bg-emerald-400 text-emerald-950 font-bold"
+                    className="text-xs px-3 py-1.5 rounded-lg font-bold btn-primary bg-amber-500 hover:bg-amber-600"
                   >
                     Accept
                   </button>
                   <button
                     onClick={() => handleDecline(g.id)}
-                    className="text-xs px-2 py-1.5 rounded-full border border-white/20 hover:border-white/40 text-white/80"
+                    className="w-7 h-7 grid place-items-center rounded-full text-wordy-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40"
                     aria-label="Decline"
                   >
                     ×
                   </button>
                 </div>
+              </div>
+            )
+          })}
+
+          {sentInvites.map(g => {
+            const opp = opponents[g.invited_user_id]
+            return (
+              <div
+                key={g.id}
+                className="flex items-center justify-between rounded-xl px-3 py-2 border bg-wordy-50 border-wordy-100 dark:bg-[#1a1130] dark:border-[#2d1b55]"
+              >
+                <div className="min-w-0">
+                  <div className="text-sm font-semibold truncate">{opp?.username ?? 'Opponent'}</div>
+                  <p className="text-xs text-wordy-400 mt-0.5">⏳ Waiting for them to accept</p>
+                </div>
+                <button
+                  onClick={() => handleCancel(g.id)}
+                  className="w-7 h-7 grid place-items-center rounded-full text-wordy-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 shrink-0"
+                  aria-label="Cancel invite"
+                >
+                  ×
+                </button>
               </div>
             )
           })}
@@ -143,16 +145,17 @@ export default function MultiplayerCard({
                 key={g.id}
                 type="button"
                 onClick={() => navigate(`/multi/${g.id}`)}
-                className="w-full text-left rounded-xl border border-amber-400/40 bg-amber-400/10 p-3 flex items-center justify-between hover:border-amber-400/70"
+                className="w-full text-left flex items-center justify-between rounded-xl px-3 py-2 border bg-wordy-50 border-wordy-100 dark:bg-[#1a1130] dark:border-[#2d1b55] hover:border-wordy-300 dark:hover:border-[#4a2d80]"
               >
-                <div>
-                  <div className="text-[11px] uppercase tracking-wide font-bold text-amber-300">Your turn</div>
-                  <div className="text-sm font-semibold">vs {opp?.username ?? 'opponent'} · turn {g.current_turn}/12</div>
-                  <div className="text-[11px] opacity-70">
-                    You {myPlayer?.total_score ?? 0} — {opp?.username?.split(' ')[0] ?? 'them'} {oppPlayer?.total_score ?? 0}
-                  </div>
+                <div className="min-w-0">
+                  <div className="text-sm font-semibold truncate">vs {opp?.username ?? 'opponent'}</div>
+                  <p className="text-xs text-wordy-400 mt-0.5">
+                    🎯 Your turn · {myPlayer?.total_score ?? 0} – {oppPlayer?.total_score ?? 0} · turn {g.current_turn}/12
+                  </p>
                 </div>
-                <span className="text-amber-300 text-xl">→</span>
+                <span className="text-xs px-3 py-1.5 rounded-lg font-bold btn-primary bg-amber-500 hover:bg-amber-600 shrink-0">
+                  Play
+                </span>
               </button>
             )
           })}
@@ -166,16 +169,13 @@ export default function MultiplayerCard({
                 key={g.id}
                 type="button"
                 onClick={() => navigate(`/multi/${g.id}`)}
-                className="w-full text-left rounded-xl border border-white/10 bg-white/[0.03] p-3 flex items-center justify-between hover:border-white/20"
+                className="w-full text-left flex items-center justify-between rounded-xl px-3 py-2 border bg-wordy-50 border-wordy-100 dark:bg-[#1a1130] dark:border-[#2d1b55] hover:border-wordy-300 dark:hover:border-[#4a2d80]"
               >
-                <div>
-                  <div className="text-[11px] uppercase tracking-wide font-bold opacity-60">
-                    Waiting on {opp?.username ?? 'opponent'}
-                  </div>
-                  <div className="text-sm font-semibold">vs {opp?.username ?? 'opponent'} · turn {g.current_turn}/12</div>
-                  <div className="text-[11px] opacity-70">
-                    You {myPlayer?.total_score ?? 0} — {opp?.username?.split(' ')[0] ?? 'them'} {oppPlayer?.total_score ?? 0}
-                  </div>
+                <div className="min-w-0">
+                  <div className="text-sm font-semibold truncate">vs {opp?.username ?? 'opponent'}</div>
+                  <p className="text-xs text-wordy-400 mt-0.5">
+                    ⏳ Waiting on them · {myPlayer?.total_score ?? 0} – {oppPlayer?.total_score ?? 0} · turn {g.current_turn}/12
+                  </p>
                 </div>
                 <span className="opacity-40 text-xl">→</span>
               </button>

@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useRef } from 'react'
 import { supabase } from '../lib/supabase.js'
 import { useRealtimeChannel } from './useRealtimeChannel.js'
 
@@ -14,13 +14,21 @@ export function useMultiplayerLobby(userId) {
   const [completed, setCompleted] = useState([])
   const [opponents, setOpponents] = useState({})
   const [loading, setLoading] = useState(true)
+  const initialLoadDone = useRef(false)
+  const lastExpireSweep = useRef(0)
 
   const reload = useCallback(async () => {
     if (!userId) return
-    setLoading(true)
+    // Only flash "Loading…" on the very first load. Subsequent refreshes
+    // (realtime + polling) update silently behind the existing data.
+    if (!initialLoadDone.current) setLoading(true)
     try {
-      // Best-effort cleanup of stale invites so they don't render.
-      supabase.rpc('yahdle_expire_stale_invites').then(() => {}, () => {})
+      // Sweep stale invites at most once every 5 minutes — not on every reload.
+      const now = Date.now()
+      if (now - lastExpireSweep.current > 5 * 60_000) {
+        lastExpireSweep.current = now
+        supabase.rpc('yahdle_expire_stale_invites').then(() => {}, () => {})
+      }
 
       const { data: games, error: gErr } = await supabase
         .from('yahdle_games')
@@ -60,6 +68,7 @@ export function useMultiplayerLobby(userId) {
       console.error('[useMultiplayerLobby] failed', err)
     } finally {
       setLoading(false)
+      initialLoadDone.current = true
     }
   }, [userId])
 
