@@ -1,0 +1,365 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Yahdle — Multiplayer Mockup v2</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+  :root { color-scheme: dark; }
+  body {
+    background: #0b0d12;
+    color: #e7e9ee;
+    font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  }
+  .phone {
+    width: 380px;
+    background: #11141b;
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 28px;
+    padding: 14px;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+  }
+  .card { background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); border-radius: 14px; }
+  .die {
+    width: 44px; height: 44px;
+    border-radius: 10px;
+    background: linear-gradient(180deg, #f7f3e9, #e7dfca);
+    color: #1a1a1a;
+    display: flex; align-items: center; justify-content: center;
+    font-weight: 800; font-size: 22px;
+    box-shadow: 0 2px 0 #b8aa84, 0 4px 12px rgba(0,0,0,0.3);
+    position: relative;
+  }
+  .die small { position: absolute; bottom: 3px; right: 5px; font-size: 9px; opacity: 0.6; font-weight: 700; }
+  .word-slot {
+    width: 38px; height: 38px;
+    border-radius: 8px;
+    border: 1px dashed rgba(255,255,255,0.18);
+    display: flex; align-items: center; justify-content: center;
+    color: rgba(255,255,255,0.3);
+  }
+  .word-tile {
+    width: 38px; height: 38px;
+    border-radius: 8px;
+    background: linear-gradient(180deg, #f7f3e9, #e7dfca);
+    color: #1a1a1a;
+    display: flex; align-items: center; justify-content: center;
+    font-weight: 800; font-size: 18px;
+    position: relative;
+  }
+  .word-tile small { position: absolute; bottom: 2px; right: 3px; font-size: 8px; opacity: 0.5; font-weight: 700; }
+  .scorebox { font-size: 11px; padding: 7px 8px 6px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.08); background: rgba(255,255,255,0.02); }
+  .scorebox.filled { background: rgba(34,197,94,0.10); border-color: rgba(34,197,94,0.35); }
+  .scorebox.empty { color: rgba(255,255,255,0.5); }
+  .scorebox .name { font-weight: 700; font-size: 11px; line-height: 1.1; }
+  .scorebox .pts { font-size: 16px; font-weight: 800; margin-top: 2px; }
+
+  /* score pills (matching SQ ScorePanel mobile pattern) */
+  .pill-score {
+    display: inline-flex; align-items: center; gap: 6px;
+    border-radius: 999px; padding: 3px 10px;
+    font-size: 12px; font-weight: 700;
+    background: rgba(168, 85, 247, 0.10);
+    border: 1px solid rgba(168, 85, 247, 0.30);
+    color: #d8b4fe;
+  }
+  .pill-score.current {
+    background: rgba(168, 85, 247, 0.25);
+    border: 2px solid #a855f7;
+    color: white;
+    padding: 2px 9px;
+  }
+  .pill-score .total { color: white; font-weight: 800; font-size: 13px; }
+  .pill-score.current .total { color: white; }
+  .pill-score:not(.current) .total { color: #f3e8ff; }
+
+  /* row-style comparison scorecard (compact full 12 view) */
+  .cmp-row { display: grid; grid-template-columns: 1fr auto auto; align-items: center; gap: 8px; padding: 6px 10px; border-radius: 8px; font-size: 12px; }
+  .cmp-row + .cmp-row { margin-top: 2px; }
+  .cmp-row.alt { background: rgba(255,255,255,0.02); }
+  .cmp-row .cat { font-weight: 600; }
+  .cmp-row .me { font-weight: 800; min-width: 28px; text-align: right; }
+  .cmp-row .them { color: #d8b4fe; font-weight: 700; min-width: 28px; text-align: right; }
+  .cmp-row.win-me .me { color: #4ade80; }
+  .cmp-row.win-them .them { color: #f472b6; }
+
+  /* opponent popup */
+  .modal-backdrop { position: absolute; inset: 0; background: rgba(0,0,0,0.6); border-radius: 28px; display: flex; align-items: flex-end; }
+  .modal-sheet { width: 100%; background: #181c25; border-top-left-radius: 20px; border-top-right-radius: 20px; padding: 16px; box-shadow: 0 -10px 40px rgba(0,0,0,0.5); }
+
+  .label { font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em; opacity: 0.55; font-weight: 700; }
+  .btn-primary { background: #7c5cff; color: white; font-weight: 700; border-radius: 10px; padding: 10px 14px; }
+  .btn-secondary { border: 1px solid rgba(255,255,255,0.18); color: white; font-weight: 600; border-radius: 10px; padding: 10px 14px; }
+  .btn-ghost { color: rgba(255,255,255,0.7); font-size: 12px; }
+  h2.frame-title { font-size: 11px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; color: #a4abc0; margin-bottom: 10px; text-align: center; }
+  .annot { font-size: 12px; color: #8a90a3; max-width: 380px; line-height: 1.45; margin-top: 8px; }
+  .grad-purple { background: linear-gradient(135deg, #7c5cff, #5b3edb); }
+  .last-play-highlight { background: rgba(244, 114, 182, 0.15); border-color: rgba(244, 114, 182, 0.55) !important; box-shadow: 0 0 0 1px rgba(244, 114, 182, 0.4) inset; }
+  .frame-stack { display: flex; flex-direction: column; align-items: center; }
+</style>
+</head>
+<body class="p-6">
+
+<header class="max-w-6xl mx-auto mb-8">
+  <h1 class="text-2xl font-extrabold mb-1">Yahdle — Multiplayer mockup v2</h1>
+  <p class="text-sm opacity-70">Async, turn-by-turn alternation. Each player rolls their own dice. Lobby + invite + completed-games card use existing SQ scaffold patterns and aren't shown here.</p>
+</header>
+
+<main class="max-w-6xl mx-auto grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 justify-items-center">
+
+  <!-- 1. YOUR TURN -->
+  <section class="frame-stack">
+    <h2 class="frame-title">1 — Active game · your turn</h2>
+    <div class="phone">
+      <!-- header (scaffold supplies back/Lobby button) -->
+      <div class="flex items-center justify-between mb-2 text-xs opacity-80">
+        <button class="btn-ghost">← Lobby</button>
+        <span>Turn 5/12</span>
+        <span class="opacity-0">·</span>
+      </div>
+
+      <!-- score pills (SQ ScorePanel pattern) -->
+      <div class="flex flex-wrap gap-2 justify-center mb-3">
+        <button class="pill-score current">
+          <span>✨</span><span>Rae (you)</span><span class="total">142</span>
+        </button>
+        <button class="pill-score">
+          <span>Sam</span><span class="total">128</span>
+        </button>
+      </div>
+
+      <!-- my scorecard (full 12 categories, 2-column like solo) -->
+      <div class="card p-3 mb-3">
+        <h2 class="text-xs uppercase tracking-wide opacity-70 text-center mb-2">Your scorecard</h2>
+        <div class="grid grid-cols-2 gap-1.5">
+          <div class="scorebox filled"><div class="name">3-Letter</div><div class="pts">9</div></div>
+          <div class="scorebox filled"><div class="name">4-Letter</div><div class="pts">14</div></div>
+          <div class="scorebox empty"><div class="name">Lexicon</div><div class="pts">—</div></div>
+          <div class="scorebox empty"><div class="name">Double Up</div><div class="pts">—</div></div>
+          <div class="scorebox filled"><div class="name">Vowel Heavy</div><div class="pts">11</div></div>
+          <div class="scorebox empty"><div class="name">Consonant Heavy</div><div class="pts">—</div></div>
+          <div class="scorebox filled"><div class="name">High Value</div><div class="pts">18</div></div>
+          <div class="scorebox empty"><div class="name">Low Ball</div><div class="pts">—</div></div>
+          <div class="scorebox filled"><div class="name">Bookends</div><div class="pts">12</div></div>
+          <div class="scorebox empty"><div class="name">No Repeats</div><div class="pts">—</div></div>
+          <div class="scorebox empty"><div class="name">Long Shot</div><div class="pts">—</div></div>
+          <div class="scorebox empty"><div class="name">Wild Card</div><div class="pts">—</div></div>
+        </div>
+      </div>
+
+      <!-- word area -->
+      <div class="card p-2 mb-3">
+        <div class="label mb-1.5 px-1">Word</div>
+        <div class="flex gap-1.5 justify-center">
+          <div class="word-tile">T<small>1</small></div>
+          <div class="word-tile">R<small>1</small></div>
+          <div class="word-tile">A<small>1</small></div>
+          <div class="word-slot">·</div>
+          <div class="word-slot">·</div>
+          <div class="word-slot">·</div>
+        </div>
+      </div>
+
+      <!-- dice rack -->
+      <div class="card p-2 mb-3">
+        <div class="label mb-1.5 px-1">Dice (tap to lock into word)</div>
+        <div class="flex gap-1.5 justify-center">
+          <div class="die">E<small>1</small></div>
+          <div class="die">N<small>1</small></div>
+          <div class="die">L<small>1</small></div>
+        </div>
+      </div>
+
+      <button class="w-full btn-primary">Re-roll (2 left)</button>
+    </div>
+    <p class="annot">Pills mirror Wordy's ScorePanel: ✨ + thicker border on whoever's turn it is. Pills are tappable — opponent's opens their full scorecard (panel 3). Big purple "your turn" banner removed; "Turn 5/12" sits in the scaffold subheader.</p>
+  </section>
+
+  <!-- 2. WAITING -->
+  <section class="frame-stack">
+    <h2 class="frame-title">2 — Active game · waiting</h2>
+    <div class="phone">
+      <div class="flex items-center justify-between mb-2 text-xs opacity-80">
+        <button class="btn-ghost">← Lobby</button>
+        <span>Turn 5/12</span>
+        <span class="opacity-0">·</span>
+      </div>
+
+      <div class="flex flex-wrap gap-2 justify-center mb-3">
+        <button class="pill-score">
+          <span>Rae (you)</span><span class="total">142</span>
+        </button>
+        <button class="pill-score current">
+          <span>✨</span><span>Sam</span><span class="total">128</span>
+        </button>
+      </div>
+
+      <div class="card p-3 mb-3">
+        <h2 class="text-xs uppercase tracking-wide opacity-70 text-center mb-2">Your scorecard</h2>
+        <div class="grid grid-cols-2 gap-1.5">
+          <div class="scorebox filled"><div class="name">3-Letter</div><div class="pts">9</div></div>
+          <div class="scorebox filled"><div class="name">4-Letter</div><div class="pts">14</div></div>
+          <div class="scorebox empty"><div class="name">Lexicon</div><div class="pts">—</div></div>
+          <div class="scorebox empty"><div class="name">Double Up</div><div class="pts">—</div></div>
+          <div class="scorebox filled"><div class="name">Vowel Heavy</div><div class="pts">11</div></div>
+          <div class="scorebox empty"><div class="name">Consonant Heavy</div><div class="pts">—</div></div>
+          <div class="scorebox filled"><div class="name">High Value</div><div class="pts">18</div></div>
+          <div class="scorebox empty"><div class="name">Low Ball</div><div class="pts">—</div></div>
+          <div class="scorebox filled"><div class="name">Bookends</div><div class="pts">12</div></div>
+          <div class="scorebox empty"><div class="name">No Repeats</div><div class="pts">—</div></div>
+          <div class="scorebox empty"><div class="name">Long Shot</div><div class="pts">—</div></div>
+          <div class="scorebox empty"><div class="name">Wild Card</div><div class="pts">—</div></div>
+        </div>
+      </div>
+
+      <!-- empty action area where dice would be -->
+      <div class="card p-4 mb-3 text-center opacity-70">
+        <div class="text-sm font-semibold">Sam is rolling…</div>
+        <div class="text-[11px] opacity-60 mt-1">Tap their pill above to see their card</div>
+      </div>
+    </div>
+    <p class="annot">No nudge/last-played-time/back button inside game — those live on the lobby card. Dice area swaps to a quiet placeholder. Tapping Sam's pill opens panel 3.</p>
+  </section>
+
+  <!-- 3. OPPONENT POPUP -->
+  <section class="frame-stack">
+    <h2 class="frame-title">3 — Opponent scorecard popup</h2>
+    <div class="phone" style="position:relative;">
+      <!-- dim background of game -->
+      <div style="opacity:0.35;">
+        <div class="flex items-center justify-between mb-2 text-xs opacity-80">
+          <button class="btn-ghost">← Lobby</button>
+          <span>Turn 5/12</span>
+          <span class="opacity-0">·</span>
+        </div>
+        <div class="flex flex-wrap gap-2 justify-center mb-3">
+          <button class="pill-score current"><span>✨</span><span>Rae (you)</span><span class="total">142</span></button>
+          <button class="pill-score"><span>Sam</span><span class="total">128</span></button>
+        </div>
+        <div class="card p-3 h-40"></div>
+      </div>
+
+      <div class="modal-backdrop">
+        <div class="modal-sheet">
+          <div class="flex items-center justify-between mb-3">
+            <div class="flex items-center gap-2">
+              <div class="w-9 h-9 rounded-full bg-pink-500/30 flex items-center justify-center text-sm font-bold">S</div>
+              <div>
+                <div class="font-extrabold text-sm">Sam</div>
+                <div class="text-[11px] opacity-60">128 points · turn 5/12</div>
+              </div>
+            </div>
+            <button class="btn-ghost text-lg">×</button>
+          </div>
+
+          <div class="label mb-1">Last play</div>
+          <div class="flex gap-1.5 justify-center mb-1">
+            <div class="word-tile">G<small>2</small></div>
+            <div class="word-tile">L<small>1</small></div>
+            <div class="word-tile">O<small>1</small></div>
+            <div class="word-tile">W<small>4</small></div>
+          </div>
+          <div class="text-[11px] opacity-70 text-center mb-3">"GLOW" → High Value · 18 pts</div>
+
+          <div class="grid grid-cols-2 gap-1.5">
+            <div class="scorebox filled"><div class="name">3-Letter</div><div class="pts">7</div></div>
+            <div class="scorebox filled"><div class="name">4-Letter</div><div class="pts">12</div></div>
+            <div class="scorebox filled"><div class="name">Lexicon</div><div class="pts">22</div></div>
+            <div class="scorebox empty"><div class="name">Double Up</div><div class="pts">—</div></div>
+            <div class="scorebox empty"><div class="name">Vowel Heavy</div><div class="pts">—</div></div>
+            <div class="scorebox empty"><div class="name">Consonant Heavy</div><div class="pts">—</div></div>
+            <div class="scorebox filled last-play-highlight"><div class="name">High Value</div><div class="pts">18</div></div>
+            <div class="scorebox empty"><div class="name">Low Ball</div><div class="pts">—</div></div>
+            <div class="scorebox filled"><div class="name">Bookends</div><div class="pts">15</div></div>
+            <div class="scorebox empty"><div class="name">No Repeats</div><div class="pts">—</div></div>
+            <div class="scorebox empty"><div class="name">Long Shot</div><div class="pts">—</div></div>
+            <div class="scorebox empty"><div class="name">Wild Card</div><div class="pts">—</div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <p class="annot">Bottom sheet over the game. Last-played category outlined in pink-400 (matches SQ tile-selection ring). Word + score callout up top. Dismissible by × or tap-outside.</p>
+  </section>
+
+  <!-- 4. COMPLETED-GAME COMPARISON -->
+  <section class="frame-stack">
+    <h2 class="frame-title">4 — Completed game · side-by-side</h2>
+    <div class="phone">
+      <div class="flex items-center justify-between mb-2 text-xs opacity-80">
+        <button class="btn-ghost">← Lobby</button>
+        <span>vs Sam · Final</span>
+        <span class="opacity-0">·</span>
+      </div>
+
+      <div class="rounded-xl grad-purple p-3 mb-3 text-center">
+        <div class="text-2xl mb-0.5">🏆</div>
+        <div class="font-extrabold">You win!</div>
+        <div class="text-xs opacity-90">312 — 287</div>
+      </div>
+
+      <div class="card p-2 mb-3">
+        <div class="cmp-row" style="background:transparent;">
+          <div class="cat opacity-60 text-[11px] uppercase tracking-wider">Category</div>
+          <div class="me text-[11px] uppercase opacity-60">You</div>
+          <div class="them text-[11px] uppercase opacity-60">Sam</div>
+        </div>
+        <div class="cmp-row alt win-me"><div class="cat">3-Letter</div><div class="me">9</div><div class="them">7</div></div>
+        <div class="cmp-row win-me"><div class="cat">4-Letter</div><div class="me">14</div><div class="them">12</div></div>
+        <div class="cmp-row alt win-me"><div class="cat">Lexicon</div><div class="me">28</div><div class="them">22</div></div>
+        <div class="cmp-row win-them"><div class="cat">Double Up</div><div class="me">19</div><div class="them">24</div></div>
+        <div class="cmp-row alt win-me"><div class="cat">Vowel Heavy</div><div class="me">11</div><div class="them">9</div></div>
+        <div class="cmp-row win-them"><div class="cat">Consonant Heavy</div><div class="me">12</div><div class="them">15</div></div>
+        <div class="cmp-row alt win-me"><div class="cat">High Value</div><div class="me">22</div><div class="them">18</div></div>
+        <div class="cmp-row win-them"><div class="cat">Low Ball</div><div class="me">3</div><div class="them">2</div></div>
+        <div class="cmp-row alt win-me"><div class="cat">Bookends</div><div class="me">18</div><div class="them">15</div></div>
+        <div class="cmp-row win-me"><div class="cat">No Repeats</div><div class="me">14</div><div class="them">11</div></div>
+        <div class="cmp-row alt win-me"><div class="cat">Long Shot</div><div class="me">22</div><div class="them">17</div></div>
+        <div class="cmp-row win-them"><div class="cat">Wild Card</div><div class="me">20</div><div class="them">28</div></div>
+        <div class="cmp-row" style="border-top: 1px solid rgba(255,255,255,0.1); margin-top: 4px; padding-top: 8px; font-size: 13px;">
+          <div class="cat font-extrabold">Total</div>
+          <div class="me">312</div>
+          <div class="them">287</div>
+        </div>
+      </div>
+    </div>
+    <p class="annot">Single-column row layout fits all 12 categories on mobile. Green = you won that category, pink = Sam did. Reached from completed-games card (lobby) or directly when game finishes. Last 10 completed games appear in lobby card (matches Rungles/Snibble/solo Yahdle).</p>
+  </section>
+
+  <!-- 5. NOTES -->
+  <section class="frame-stack">
+    <h2 class="frame-title">Design notes</h2>
+    <div class="phone" style="background:#11141b">
+      <div class="text-sm space-y-3 leading-relaxed">
+        <div>
+          <div class="label mb-1">From scaffold (not redesigned)</div>
+          <p class="opacity-90">Lobby multiplayer card · CreateGameSheet (invite friend) · CompletedGamesCard · SQBoardShell back button · realtime channel · push notifications.</p>
+        </div>
+        <div>
+          <div class="label mb-1">Pill rules</div>
+          <p class="opacity-90">Tappable. Active player gets ✨ + 2px purple border. Pill shows current total only — no "+X" delta badge.</p>
+        </div>
+        <div>
+          <div class="label mb-1">Highlight colour</div>
+          <p class="opacity-90">Opponent's last-played category gets <span style="color:#f472b6;font-weight:700;">pink-400</span> outline + tinted bg. Matches SQ tile-selection ring.</p>
+        </div>
+        <div>
+          <div class="label mb-1">Completed games</div>
+          <p class="opacity-90">Show last 10 (matches Rungles/Snibble/solo Yahdle). Not dismissible. Tap to open the comparison view (panel 4).</p>
+        </div>
+        <div>
+          <div class="label mb-1">Still open</div>
+          <ul class="opacity-90 list-disc pl-4 space-y-1">
+            <li>Strict alternation vs free-pace turns?</li>
+            <li>"Coin flip" / first-player rule?</li>
+            <li>Auto-forfeit timer? (Wordy has one)</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+</body>
+</html>

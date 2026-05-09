@@ -1,0 +1,110 @@
+import { supabase } from './supabase.js'
+
+// Thin wrappers around the Yahdle multiplayer RPCs. All game state
+// mutations go server-side (SECDEF) — this file just relays.
+
+export async function createGame(invitedUserId) {
+  const { data, error } = await supabase.rpc('yahdle_create_game', {
+    p_invited_user_id: invitedUserId,
+  })
+  if (error) throw error
+  return { gameId: data }
+}
+
+export async function acceptInvite(gameId) {
+  const { error } = await supabase.rpc('yahdle_accept_invite', { p_game_id: gameId })
+  if (error) throw error
+}
+
+export async function declineInvite(gameId) {
+  const { error } = await supabase.rpc('yahdle_decline_invite', { p_game_id: gameId })
+  if (error) throw error
+}
+
+export async function cancelInvite(gameId) {
+  const { error } = await supabase.rpc('yahdle_cancel_invite', { p_game_id: gameId })
+  if (error) throw error
+}
+
+export async function rollDice(gameId) {
+  const { data, error } = await supabase.rpc('yahdle_roll_dice', { p_game_id: gameId })
+  if (error) throw error
+  return data
+}
+
+export async function parkDie(gameId, dieIdx) {
+  const { error } = await supabase.rpc('yahdle_park_die', { p_game_id: gameId, p_die_idx: dieIdx })
+  if (error) throw error
+}
+
+export async function unparkDie(gameId, builderIdx) {
+  const { error } = await supabase.rpc('yahdle_unpark_die', { p_game_id: gameId, p_builder_idx: builderIdx })
+  if (error) throw error
+}
+
+export async function swapLetters(gameId, a, b) {
+  const { error } = await supabase.rpc('yahdle_swap_letters', { p_game_id: gameId, p_idx_a: a, p_idx_b: b })
+  if (error) throw error
+}
+
+export async function scoreCategory(gameId, categoryId, word) {
+  const { error } = await supabase.rpc('yahdle_score_category', {
+    p_game_id: gameId, p_category_id: categoryId, p_word: word,
+  })
+  if (error) throw error
+}
+
+export async function takeZero(gameId, categoryId) {
+  const { error } = await supabase.rpc('yahdle_take_zero', { p_game_id: gameId, p_category_id: categoryId })
+  if (error) throw error
+}
+
+export async function forfeitGame(gameId) {
+  const { error } = await supabase.rpc('yahdle_forfeit_game', { p_game_id: gameId })
+  if (error) throw error
+}
+
+export async function claimInactiveWin(gameId) {
+  const { error } = await supabase.rpc('yahdle_claim_inactive_win', { p_game_id: gameId })
+  if (error) throw error
+}
+
+export async function rematch(prevGameId) {
+  const { data, error } = await supabase.rpc('yahdle_rematch', { p_game_id: prevGameId })
+  if (error) throw error
+  return { gameId: data }
+}
+
+// Read-side helpers ────────────────────────────────────────────
+
+// Load the player's own private turn state. Opponent's is hidden by RLS.
+export async function loadMyTurnState(gameId, userId) {
+  const { data, error } = await supabase
+    .from('yahdle_turn_state')
+    .select('faces, builder, rolls_used, updated_at')
+    .eq('game_id', gameId)
+    .eq('user_id', userId)
+    .maybeSingle()
+  if (error) throw error
+  return data ?? { faces: [], builder: [], rolls_used: 0 }
+}
+
+export async function loadGame(gameId) {
+  const { data, error } = await supabase
+    .from('yahdle_games')
+    .select('*')
+    .eq('id', gameId)
+    .single()
+  if (error) throw error
+  return data
+}
+
+export async function loadPlayers(gameId) {
+  const { data, error } = await supabase
+    .from('yahdle_players')
+    .select('*')
+    .eq('game_id', gameId)
+    .order('player_index')
+  if (error) throw error
+  return data ?? []
+}

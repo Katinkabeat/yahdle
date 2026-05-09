@@ -1,97 +1,196 @@
-// Middle lobby card — multiplayer entry point: Create button, list of open
-// joinable games, list of the player's active games. Empty state is plain
-// text (no big bubble emoji per SQ convention).
-//
-// TODO wire up:
-//   - handleCreate -> insert a new game row, then DO NOT navigate. The new
-//     row arrives via the realtime subscription below and renders in the
-//     list — no dead-end "match posted" screen needed.
-//   - openGames    -> fetched + realtime-subscribed list of joinable games
-//   - myGames      -> fetched + realtime-subscribed list of the user's active games
-//
-// LOBBY REALTIME PATTERN (use the shared `useRealtimeChannel` hook):
-//
-//   useRealtimeChannel({
-//     channelName: `lobby_yahdle_${userId}`,
-//     subscriptions: [
-//       // The user's own created games:
-//       { event: '*', schema: 'public', table: 'yahdle_games',
-//         filter: `created_by=eq.${userId}` },
-//       // Games the user was invited to:
-//       { event: '*', schema: 'public', table: 'yahdle_games',
-//         filter: `invited_user_id=eq.${userId}` },
-//       // The user's player rows (for state-of-play changes):
-//       { event: '*', schema: 'public', table: 'yahdle_players',
-//         filter: `user_id=eq.${userId}` },
-//     ],
-//     onChange: refetchLobby,
-//     pollMs: 30_000,
-//     enabled: !!userId,
-//   })
-//
-// IMPORTANT: realtime delivers nothing until your tables are added to the
-// `supabase_realtime` publication. Add to your initial migration:
-//
-//   alter publication supabase_realtime add table public.yahdle_games;
-//   alter publication supabase_realtime add table public.yahdle_players;
-//
-// And: also patch the SQ hub (rae-side-quest) to subscribe to your tables
-// in `LandingPage.jsx`'s `hub-inbox` channel + add a `yahdle_pending_for(uid)`
-// SQL function so this game's pending counts show in the hub bell.
+import { useState } from 'react'
+import { useNavigate } from 'react-router-dom'
+import toast from 'react-hot-toast'
+import { acceptInvite, declineInvite, cancelInvite } from '../../lib/multiplayerActions.js'
+import CreateGameSheet from './CreateGameSheet.jsx'
+
+// Yahdle MP lobby card. Pending invites first, your-turn second, waiting third.
+// Lobby data is fetched once in LobbyPage via useMultiplayerLobby and passed in.
 export default function MultiplayerCard({
-  openGames = [],
-  myGames = [],
-  onCreate,
-  creating = false,
-  onEnterGame,
+  user,
+  pendingInvites = [],
+  sentInvites = [],
+  activeGames = [],
+  opponents = {},
+  loading = false,
 }) {
-  const hasAny = openGames.length > 0 || myGames.length > 0
+  const navigate = useNavigate()
+  const [sheetOpen, setSheetOpen] = useState(false)
+
+  function opponentOf(game) {
+    const oppId = game.created_by === user?.id ? game.invited_user_id : game.created_by
+    return opponents[oppId]
+  }
+
+  async function handleAccept(gameId) {
+    try {
+      await acceptInvite(gameId)
+      toast.success('Game on!')
+      navigate(`/multi/${gameId}`)
+    } catch (err) {
+      toast.error(err.message || 'Failed to accept')
+    }
+  }
+
+  async function handleDecline(gameId) {
+    if (!confirm('Decline this invite?')) return
+    try {
+      await declineInvite(gameId)
+    } catch (err) {
+      toast.error(err.message || 'Failed to decline')
+    }
+  }
+
+  async function handleCancel(gameId) {
+    if (!confirm('Cancel this invite?')) return
+    try {
+      await cancelInvite(gameId)
+    } catch (err) {
+      toast.error(err.message || 'Failed to cancel')
+    }
+  }
+
+  // Split active games into your-turn / waiting-on-opponent.
+  const yourTurn = []
+  const waiting = []
+  for (const g of activeGames) {
+    const myPlayer = g.yahdle_players?.find(p => p.user_id === user?.id)
+    if (!myPlayer) continue
+    if (myPlayer.player_index === g.current_player_idx) yourTurn.push(g)
+    else waiting.push(g)
+  }
 
   return (
-    <section className="card">
-      <h2 className="font-display text-xl mb-1">🎮 Multiplayer</h2>
-      <p className="text-sm opacity-80 mb-3">
-        Create a game or jump into an open one.
-      </p>
-      <button
-        type="button"
-        className="btn-primary mb-4"
-        onClick={onCreate}
-        disabled={creating}
-      >
-        {creating ? '⏳ Creating…' : '✨ Create game'}
-      </button>
-
-      {hasAny ? (
-        <div className="space-y-2">
-          {openGames.map((g) => (
-            <button
-              key={g.id}
-              type="button"
-              className="w-full text-left rounded-xl border border-purple-200 dark:border-[#2d1b55] px-3 py-2 hover:bg-purple-50 dark:hover:bg-[#1a1130]"
-              onClick={() => onEnterGame?.(g.id)}
-            >
-              <div className="text-sm font-bold">Open game</div>
-              <div className="text-xs opacity-70">Tap to join</div>
-            </button>
-          ))}
-          {myGames.map((g) => (
-            <button
-              key={g.id}
-              type="button"
-              className="w-full text-left rounded-xl border border-purple-200 dark:border-[#2d1b55] px-3 py-2 hover:bg-purple-50 dark:hover:bg-[#1a1130]"
-              onClick={() => onEnterGame?.(g.id)}
-            >
-              <div className="text-sm font-bold">Your game</div>
-              <div className="text-xs opacity-70">Tap to resume</div>
-            </button>
-          ))}
+    <>
+      <section className="card">
+        <div className="flex items-center justify-between mb-2">
+          <h2 className="font-display text-xl">🎮 Multiplayer</h2>
+          <button
+            type="button"
+            onClick={() => setSheetOpen(true)}
+            className="text-xs px-3 py-1.5 rounded-full border border-white/20 hover:border-white/40 font-semibold"
+          >
+            + New game
+          </button>
         </div>
-      ) : (
-        <p className="text-sm opacity-60 text-center py-2">
-          No open games yet — create one!
-        </p>
+
+        {loading && <p className="text-sm opacity-60 text-center py-2">Loading…</p>}
+
+        {!loading && pendingInvites.length === 0 && sentInvites.length === 0 && yourTurn.length === 0 && waiting.length === 0 && (
+          <p className="text-sm opacity-60 text-center py-3">
+            No active games — invite a friend to start one.
+          </p>
+        )}
+
+        <div className="space-y-2">
+          {sentInvites.map(g => {
+            const opp = opponents[g.invited_user_id]
+            return (
+              <div
+                key={g.id}
+                className="rounded-xl border border-white/10 bg-white/[0.03] p-3 flex items-center justify-between"
+              >
+                <div>
+                  <div className="text-[11px] uppercase tracking-wide font-bold opacity-60">Invite sent</div>
+                  <div className="text-sm font-semibold">Waiting for {opp?.username ?? 'opponent'} to accept</div>
+                </div>
+                <button
+                  onClick={() => handleCancel(g.id)}
+                  className="text-xs px-3 py-1.5 rounded-full border border-white/20 hover:border-red-400/60 hover:text-red-300 text-white/70"
+                >
+                  Cancel
+                </button>
+              </div>
+            )
+          })}
+
+          {pendingInvites.map(g => {
+            const opp = opponentOf(g)
+            return (
+              <div
+                key={g.id}
+                className="rounded-xl border border-emerald-400/40 bg-emerald-400/10 p-3 flex items-center justify-between"
+              >
+                <div>
+                  <div className="text-[11px] uppercase tracking-wide font-bold text-emerald-300">Invite</div>
+                  <div className="text-sm font-semibold">{opp?.username ?? 'Someone'} invited you</div>
+                </div>
+                <div className="flex gap-1.5">
+                  <button
+                    onClick={() => handleAccept(g.id)}
+                    className="text-xs px-3 py-1.5 rounded-full bg-emerald-400 text-emerald-950 font-bold"
+                  >
+                    Accept
+                  </button>
+                  <button
+                    onClick={() => handleDecline(g.id)}
+                    className="text-xs px-2 py-1.5 rounded-full border border-white/20 hover:border-white/40 text-white/80"
+                    aria-label="Decline"
+                  >
+                    ×
+                  </button>
+                </div>
+              </div>
+            )
+          })}
+
+          {yourTurn.map(g => {
+            const opp = opponentOf(g)
+            const myPlayer = g.yahdle_players.find(p => p.user_id === user?.id)
+            const oppPlayer = g.yahdle_players.find(p => p.user_id !== user?.id)
+            return (
+              <button
+                key={g.id}
+                type="button"
+                onClick={() => navigate(`/multi/${g.id}`)}
+                className="w-full text-left rounded-xl border border-amber-400/40 bg-amber-400/10 p-3 flex items-center justify-between hover:border-amber-400/70"
+              >
+                <div>
+                  <div className="text-[11px] uppercase tracking-wide font-bold text-amber-300">Your turn</div>
+                  <div className="text-sm font-semibold">vs {opp?.username ?? 'opponent'} · turn {g.current_turn}/12</div>
+                  <div className="text-[11px] opacity-70">
+                    You {myPlayer?.total_score ?? 0} — {opp?.username?.split(' ')[0] ?? 'them'} {oppPlayer?.total_score ?? 0}
+                  </div>
+                </div>
+                <span className="text-amber-300 text-xl">→</span>
+              </button>
+            )
+          })}
+
+          {waiting.map(g => {
+            const opp = opponentOf(g)
+            const myPlayer = g.yahdle_players.find(p => p.user_id === user?.id)
+            const oppPlayer = g.yahdle_players.find(p => p.user_id !== user?.id)
+            return (
+              <button
+                key={g.id}
+                type="button"
+                onClick={() => navigate(`/multi/${g.id}`)}
+                className="w-full text-left rounded-xl border border-white/10 bg-white/[0.03] p-3 flex items-center justify-between hover:border-white/20"
+              >
+                <div>
+                  <div className="text-[11px] uppercase tracking-wide font-bold opacity-60">
+                    Waiting on {opp?.username ?? 'opponent'}
+                  </div>
+                  <div className="text-sm font-semibold">vs {opp?.username ?? 'opponent'} · turn {g.current_turn}/12</div>
+                  <div className="text-[11px] opacity-70">
+                    You {myPlayer?.total_score ?? 0} — {opp?.username?.split(' ')[0] ?? 'them'} {oppPlayer?.total_score ?? 0}
+                  </div>
+                </div>
+                <span className="opacity-40 text-xl">→</span>
+              </button>
+            )
+          })}
+        </div>
+      </section>
+
+      {sheetOpen && (
+        <CreateGameSheet
+          user={user}
+          onClose={() => setSheetOpen(false)}
+          onCreated={() => setSheetOpen(false)}
+        />
       )}
-    </section>
+    </>
   )
 }
