@@ -59,6 +59,11 @@ export async function takeZero(gameId, categoryId) {
   if (error) throw error
 }
 
+export async function clearBuilder(gameId) {
+  const { error } = await supabase.rpc('yahdle_clear_builder', { p_game_id: gameId })
+  if (error) throw error
+}
+
 export async function forfeitGame(gameId) {
   const { error } = await supabase.rpc('yahdle_forfeit_game', { p_game_id: gameId })
   if (error) throw error
@@ -94,7 +99,7 @@ export async function loadGame(gameId) {
     .from('yahdle_games')
     .select('*')
     .eq('id', gameId)
-    .single()
+    .maybeSingle()
   if (error) throw error
   return data
 }

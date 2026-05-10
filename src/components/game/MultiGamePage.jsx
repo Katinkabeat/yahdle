@@ -10,9 +10,9 @@ import AvatarMenu from '../lobby/AvatarMenu.jsx'
 import HeaderRight from '../HeaderRight.jsx'
 import { CATEGORIES, wordScore } from '../../lib/scoring.js'
 import { DIE_COUNT, ROLLS_PER_TURN } from '../../lib/dice.js'
-
-const TOTAL_TURNS = CATEGORIES.length
 import { useRealtimeChannel } from '../../hooks/useRealtimeChannel.js'
+import { useDictionary } from '../../hooks/useDictionary.js'
+import { evaluateScoreAttempt } from '../../lib/scoreValidation.js'
 import { supabase } from '../../lib/supabase.js'
 import {
   loadGame,
@@ -24,12 +24,29 @@ import {
   swapLetters,
   scoreCategory,
   takeZero,
+  clearBuilder as clearBuilderRpc,
   forfeitGame,
   claimInactiveWin,
   rematch,
 } from '../../lib/multiplayerActions.js'
 import OpponentScoreSheet from './OpponentScoreSheet.jsx'
 import GameOverComparison from './GameOverComparison.jsx'
+import Scorecard from './Scorecard.jsx'
+import WordBuilder from './WordBuilder.jsx'
+import DiceRack from './DiceRack.jsx'
+
+const TOTAL_TURNS = CATEGORIES.length
+
+// Pad/truncate the server's faces array to length DIE_COUNT (server returns
+// `[]` until the first roll). Lets DiceRack render a stable 6-slot rack.
+function normalizeFaces(faces) {
+  const out = new Array(DIE_COUNT).fill(null)
+  if (!faces) return out
+  for (let i = 0; i < DIE_COUNT; i++) {
+    if (faces[i] != null) out[i] = faces[i]
+  }
+  return out
+}
 
 export default function MultiGamePage({ session, profile, isAdmin }) {
   const { gameId } = useParams()
@@ -44,24 +61,31 @@ export default function MultiGamePage({ session, profile, isAdmin }) {
   const [swapIdx, setSwapIdx] = useState(null)
   const [busy, setBusy] = useState(false)
   const [oppSheetOpen, setOppSheetOpen] = useState(false)
-  const [animating, setAnimating] = useState([])
+  const [animating, setAnimating] = useState(() => new Array(DIE_COUNT).fill(false))
+  const { dict, dictReady } = useDictionary()
 
   const myPlayer = players.find(p => p.user_id === userId)
   const oppPlayer = players.find(p => p.user_id !== userId)
   const isMyTurn = !!(game && myPlayer && game.status === 'active' && myPlayer.player_index === game.current_player_idx)
   const isGameOver = game?.status === 'finished'
-  const inBuilderSet = useMemo(() => {
-    const s = new Set()
-    for (const b of (myTurnState.builder ?? [])) s.add(b.dieIdx)
-    return s
+
+  const faces = useMemo(() => normalizeFaces(myTurnState.faces), [myTurnState.faces])
+  const inBuilder = useMemo(() => {
+    const set = new Set((myTurnState.builder ?? []).map(b => b.dieIdx))
+    return new Array(DIE_COUNT).fill(false).map((_, i) => set.has(i))
   }, [myTurnState.builder])
-  const builderWord = useMemo(() => (myTurnState.builder ?? []).map(b => b.letter).join(''), [myTurnState.builder])
+  const builderWord = useMemo(
+    () => (myTurnState.builder ?? []).map(b => b.letter).join(''),
+    [myTurnState.builder]
+  )
   const builderScore = wordScore(builderWord)
 
+  const [notFound, setNotFound] = useState(false)
   const refresh = useCallback(async () => {
     if (!gameId) return
     try {
       const [g, ps] = await Promise.all([loadGame(gameId), loadPlayers(gameId)])
+      if (!g) { setNotFound(true); return }
       setGame(g)
       setPlayers(ps)
       if (userId) {
@@ -76,7 +100,6 @@ export default function MultiGamePage({ session, profile, isAdmin }) {
 
   useEffect(() => { refresh() }, [refresh])
 
-  // Look up opponent profile once we know who they are.
   useEffect(() => {
     if (!oppPlayer?.user_id) return
     supabase.from('profiles').select('id, username, avatar_hue').eq('id', oppPlayer.user_id).single()
@@ -94,6 +117,10 @@ export default function MultiGamePage({ session, profile, isAdmin }) {
     enabled: !!gameId,
   })
 
+  // withBusy gates actions that need a server round-trip before the UI
+  // can reflect the next state (Roll, Score). Optimistic actions
+  // (park/unpark/swap/clear) update local state immediately and let the
+  // server catch up — they don't go through this gate.
   async function withBusy(fn) {
     if (busy) return
     setBusy(true)
@@ -104,24 +131,24 @@ export default function MultiGamePage({ session, profile, isAdmin }) {
 
   function handleRoll() {
     if (!isMyTurn || (myTurnState.rolls_used ?? 0) >= ROLLS_PER_TURN) return
-    if ((myTurnState.builder?.length ?? 0) >= DIE_COUNT) return
+    if (inBuilder.every(Boolean)) return
+    // Animate only the dice that will actually re-roll (matches solo).
+    setAnimating(inBuilder.map(b => !b))
+    setTimeout(() => setAnimating(new Array(DIE_COUNT).fill(false)), 500)
     withBusy(async () => {
       const newFaces = await rollDice(gameId)
-      setMyTurnState(s => ({ ...s, faces: newFaces, rolls_used: (s.rolls_used ?? 0) + 1 }))
-      setAnimating(new Array(DIE_COUNT).fill(false).map((_, i) => !inBuilderSet.has(i)))
-      setTimeout(() => setAnimating(new Array(DIE_COUNT).fill(false)), 500)
+      setMyTurnState(s => ({
+        ...s,
+        faces: normalizeFaces(newFaces),
+        rolls_used: (s.rolls_used ?? 0) + 1,
+      }))
     })
   }
 
-  // Optimistic helpers — update local state immediately, sync with the
-  // server in the background. On error we toast and refresh from the
-  // server to recover. Roll/score still go through withBusy because
-  // they need the server's new state (dice values, turn advance).
   function tapRackDie(i) {
     if (!isMyTurn) return
-    const letter = myTurnState.faces?.[i]
-    if (letter == null) return
-    if (inBuilderSet.has(i)) return
+    const letter = faces[i]
+    if (letter == null || inBuilder[i]) return
     if ((myTurnState.builder?.length ?? 0) >= DIE_COUNT) return
     setMyTurnState(s => ({ ...s, builder: [...(s.builder ?? []), { letter, dieIdx: i }] }))
     parkDie(gameId, i).catch(err => { toast.error(err.message || 'Failed'); refresh() })
@@ -141,26 +168,36 @@ export default function MultiGamePage({ session, profile, isAdmin }) {
     swapLetters(gameId, a, b).catch(err => { toast.error(err.message || 'Failed'); refresh() })
   }
 
-  function removeFromBuilder(idx) {
+  function removeBuilderLetter(idx) {
     if (!isMyTurn) return
     setSwapIdx(null)
     setMyTurnState(s => ({ ...s, builder: (s.builder ?? []).filter((_, i) => i !== idx) }))
     unparkDie(gameId, idx).catch(err => { toast.error(err.message || 'Failed'); refresh() })
   }
 
+  function clearBuilder() {
+    if (!isMyTurn) return
+    setSwapIdx(null)
+    setMyTurnState(s => ({ ...s, builder: [] }))
+    clearBuilderRpc(gameId).catch(err => { toast.error(err.message || 'Failed'); refresh() })
+  }
+
+  // Same validation flow as solo via the shared scoreValidation helper.
   function tryScore(categoryId) {
     if (!isMyTurn || isGameOver) return
     if (myPlayer?.scores?.[categoryId] != null) return
     const cat = CATEGORIES.find(c => c.id === categoryId)
     if (!cat) return
-    if (!builderWord) {
-      setZeroAskCategory(categoryId); return
-    }
-    const fits = cat.validate({ word: builderWord, faces: myTurnState.faces ?? [], score: builderScore })
-    if (!fits) {
-      setZeroAskCategory(categoryId); return
-    }
-    withBusy(() => scoreCategory(gameId, categoryId, builderWord))
+    const result = evaluateScoreAttempt({
+      builderWord, builderScore, faces,
+      categoryId, dict, dictReady,
+    })
+    if (result.kind === 'reject') { toast.error(result.reason); return }
+    if (result.kind === 'ask-zero') { setZeroAskCategory(categoryId); return }
+    withBusy(async () => {
+      await scoreCategory(gameId, categoryId, builderWord)
+      toast.success(`+${builderScore} • ${cat.name}`)
+    })
   }
 
   function confirmZero(categoryId) {
@@ -182,7 +219,7 @@ export default function MultiGamePage({ session, profile, isAdmin }) {
 
   async function handleRematch() {
     try {
-      const { gameId: newId } = await rematch(gameId)
+      await rematch(gameId)
       toast.success('Rematch invite sent!')
       navigate('/')
     } catch (err) {
@@ -190,13 +227,11 @@ export default function MultiGamePage({ session, profile, isAdmin }) {
     }
   }
 
-  // Score totals for pill display.
   const myTotal = myPlayer?.total_score ?? 0
   const oppTotal = oppPlayer?.total_score ?? 0
   const oppName = oppProfile?.username ?? 'Opponent'
   const myName = profile?.username ?? 'You'
 
-  // Inactivity claim — shown when it's NOT my turn and >7 days passed.
   const canClaim = (() => {
     if (!game || game.status !== 'active' || !myPlayer) return false
     if (myPlayer.player_index === game.current_player_idx) return false
@@ -239,7 +274,13 @@ export default function MultiGamePage({ session, profile, isAdmin }) {
         />
       }
     >
-      <div className="py-2 px-2 space-y-2">
+      <div className="py-4 px-2 space-y-4">
+
+        {notFound && (
+          <div className="card p-4 text-center text-sm opacity-80">
+            This game doesn't exist or you're not a participant.
+          </div>
+        )}
 
         {/* score pills */}
         {game && (
@@ -277,134 +318,37 @@ export default function MultiGamePage({ session, profile, isAdmin }) {
         {/* Active game UI */}
         {!isGameOver && game?.status === 'active' && (
           <>
-            {/* My scorecard */}
-            <div className="card p-2">
-              <div className="grid grid-cols-2 gap-1">
-                {CATEGORIES.map(cat => {
-                  const filled = myPlayer?.scores?.[cat.id]
-                  const filledNum = filled?.score ?? null
-                  const filledWord = filled?.word ?? null
-                  const asking = zeroAskCategory === cat.id
-                  if (asking && filled == null) {
-                    const reason = builderWord
-                      ? `${builderWord} doesn't fit here.`
-                      : `No word yet.`
-                    return (
-                      <div key={cat.id} className="rounded-lg px-2 py-1.5 border border-amber-400/60 bg-amber-900/30 text-xs">
-                        <div className="font-bold mb-1">{cat.name}</div>
-                        <div className="text-amber-200 mb-1.5 text-[11px]">{reason} Take a 0?</div>
-                        <div className="flex gap-1.5">
-                          <button onClick={() => confirmZero(cat.id)} className="flex-1 rounded bg-amber-400 text-amber-950 font-bold py-1">Take 0</button>
-                          <button onClick={cancelZero} className="flex-1 rounded border border-white/30 text-white py-1">Cancel</button>
-                        </div>
-                      </div>
-                    )
-                  }
-                  return (
-                    <button
-                      key={cat.id}
-                      type="button"
-                      onClick={() => tryScore(cat.id)}
-                      disabled={filled != null || !isMyTurn || busy}
-                      className={`text-left rounded-lg px-2 py-1.5 border text-xs transition ${
-                        filled != null
-                          ? 'border-green-600/40 bg-green-900/20 cursor-default'
-                          : isMyTurn
-                            ? 'border-white/10 hover:border-wordy-500 hover:bg-wordy-700/20'
-                            : 'border-white/5 opacity-60 cursor-not-allowed'
-                      }`}
-                    >
-                      <div className="font-bold">{cat.name}</div>
-                      {filled != null ? (
-                        <div className="text-green-400 mt-0.5">
-                          {filledWord ? `${filledWord} — ${filledNum} pts` : `— ${filledNum} pts`}
-                        </div>
-                      ) : (
-                        <div className="opacity-60 text-[11px]">{cat.desc}</div>
-                      )}
-                    </button>
-                  )
-                })}
-              </div>
-            </div>
+            <Scorecard
+              scores={myPlayer?.scores}
+              onTryScore={tryScore}
+              disabled={!isMyTurn || busy}
+              zeroAskCategory={zeroAskCategory}
+              onConfirmZero={confirmZero}
+              onCancelZero={cancelZero}
+              builderWord={builderWord}
+            />
 
             {isMyTurn ? (
               <>
-                {/* Word area */}
-                <div className="card p-2">
-                  <div className="flex gap-1 justify-center flex-wrap min-h-[36px]">
-                    {(myTurnState.builder?.length ?? 0) === 0 ? (
-                      <span className="text-xs opacity-50 self-center">
-                        {(myTurnState.rolls_used ?? 0) === 0 ? 'Roll the dice to start' : 'Tap a die to add to your word'}
-                      </span>
-                    ) : (
-                      myTurnState.builder.map((tile, i) => {
-                        const isSwap = swapIdx === i
-                        const value = wordScore(tile.letter)
-                        return (
-                          <div key={i} className="relative">
-                            <button
-                              type="button"
-                              onClick={() => tapBuilderLetter(i)}
-                              className={`tile tile-placed font-display text-xl w-9 h-9 ${isSwap ? 'tile-selected' : ''}`}
-                            >
-                              <span className="leading-none">{tile.letter}</span>
-                              {value != null && <span className="tile-value">{value}</span>}
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => removeFromBuilder(i)}
-                              className="absolute -top-1.5 -right-1.5 w-4 h-4 rounded-full bg-wordy-900 border border-white/30 text-[10px] leading-none flex items-center justify-center hover:bg-red-700"
-                              aria-label="Remove letter"
-                            >×</button>
-                          </div>
-                        )
-                      })
-                    )}
-                  </div>
-                  {builderWord && (
-                    <div className="text-[10px] opacity-60 text-center mt-1">{builderWord} · {builderScore} pts</div>
-                  )}
-                </div>
-
-                {/* Dice rack */}
-                <div className="card p-2">
-                  <div className="flex gap-1 justify-center flex-wrap min-h-[44px]">
-                    {(myTurnState.faces ?? []).map((face, i) => {
-                      if (inBuilderSet.has(i) || face == null) return null
-                      const value = wordScore(face)
-                      return (
-                        <button
-                          key={i}
-                          type="button"
-                          onClick={() => tapRackDie(i)}
-                          style={{ perspective: '400px' }}
-                          className={`tile font-display text-xl w-11 h-11 ${animating[i] ? 'die-rolling' : ''}`}
-                        >
-                          <span className="leading-none">{face}</span>
-                          {value != null && <span className="tile-value">{value}</span>}
-                        </button>
-                      )
-                    })}
-                    {(myTurnState.faces ?? []).length > 0 && (myTurnState.faces ?? []).every((_, i) => inBuilderSet.has(i)) && (
-                      <div className="text-xs opacity-60 self-center">All dice in your word.</div>
-                    )}
-                    {(myTurnState.faces ?? []).length === 0 && (
-                      <div className="text-xs opacity-60 self-center">Tap Roll to start your turn.</div>
-                    )}
-                  </div>
-                </div>
-
-                <button
-                  type="button"
-                  onClick={handleRoll}
-                  disabled={busy || (myTurnState.rolls_used ?? 0) >= ROLLS_PER_TURN}
-                  className="w-full btn-primary disabled:opacity-50"
-                >
-                  {(myTurnState.rolls_used ?? 0) === 0
-                    ? 'Roll'
-                    : `Re-roll (${ROLLS_PER_TURN - (myTurnState.rolls_used ?? 0)} left)`}
-                </button>
+                <WordBuilder
+                  builder={myTurnState.builder ?? []}
+                  rollsThisTurn={myTurnState.rolls_used ?? 0}
+                  onTapLetter={tapBuilderLetter}
+                  onRemoveLetter={removeBuilderLetter}
+                  onClear={clearBuilder}
+                  swapIdx={swapIdx}
+                  builderWord={builderWord}
+                  builderScore={builderScore}
+                />
+                <DiceRack
+                  faces={faces}
+                  inBuilder={inBuilder}
+                  animating={animating}
+                  rollsThisTurn={myTurnState.rolls_used ?? 0}
+                  onTapDie={tapRackDie}
+                  onRoll={handleRoll}
+                  disabled={busy}
+                />
               </>
             ) : (
               <div className="card p-4 text-center opacity-80">

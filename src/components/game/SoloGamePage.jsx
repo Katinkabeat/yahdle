@@ -5,15 +5,18 @@ import {
   SQBoardShell,
   SQLobbyHeader,
   SQBoardHeader,
-  SQButton,
 } from '../../../../rae-side-quest/packages/sq-ui'
 import AvatarMenu from '../lobby/AvatarMenu.jsx'
 import HeaderRight from '../HeaderRight.jsx'
-import { DICE, DIE_COUNT, ROLLS_PER_TURN, rollDice } from '../../lib/dice.js'
-import { CATEGORIES, wordScore, isSpellableFromFaces, LETTER_VALUES } from '../../lib/scoring.js'
+import { DICE, DIE_COUNT, ROLLS_PER_TURN } from '../../lib/dice.js'
+import { CATEGORIES, wordScore } from '../../lib/scoring.js'
 import { rngFromSeed } from '../../lib/rng.js'
-import { loadDictionary, isValidWord } from '../../lib/dictionary.js'
+import { useDictionary } from '../../hooks/useDictionary.js'
+import { evaluateScoreAttempt } from '../../lib/scoreValidation.js'
 import { supabase } from '../../lib/supabase.js'
+import Scorecard from './Scorecard.jsx'
+import WordBuilder from './WordBuilder.jsx'
+import DiceRack from './DiceRack.jsx'
 
 const TOTAL_TURNS = CATEGORIES.length
 
@@ -80,15 +83,10 @@ export default function SoloGamePage({ session, profile, isAdmin }) {
     : `yahdle:daily:${gameId}`
 
   const [state, setState] = useState(() => loadState(userId, gameId) || makeInitialState())
-  const [dictReady, setDictReady] = useState(false)
-  const [dict, setDict] = useState(null)
+  const { dict, dictReady } = useDictionary()
   // Per-die animation flag — set true when a die is mid-roll, cleared 500ms
   // later. Drives the .die-rolling CSS keyframe in index.css.
   const [animating, setAnimating] = useState(() => new Array(DIE_COUNT).fill(false))
-
-  useEffect(() => {
-    loadDictionary().then(set => { setDict(set); setDictReady(true) })
-  }, [])
 
   useEffect(() => {
     saveState(userId, gameId, state)
@@ -158,7 +156,6 @@ export default function SoloGamePage({ session, profile, isAdmin }) {
     }))
   }
 
-  // Tap a die in the rack → move it (and its letter) into the word area.
   function tapRackDie(i) {
     if (state.faces[i] == null) return
     if (inBuilder[i]) return
@@ -169,17 +166,9 @@ export default function SoloGamePage({ session, profile, isAdmin }) {
     }))
   }
 
-  // Tap a letter in the word area. Either selects it for swap, or
-  // completes a pending swap.
   function tapBuilderLetter(idx) {
-    if (swapIdx == null) {
-      setSwapIdx(idx)
-      return
-    }
-    if (swapIdx === idx) {
-      setSwapIdx(null)
-      return
-    }
+    if (swapIdx == null) { setSwapIdx(idx); return }
+    if (swapIdx === idx) { setSwapIdx(null); return }
     setState(s => {
       const builder = s.builder.slice()
       ;[builder[swapIdx], builder[idx]] = [builder[idx], builder[swapIdx]]
@@ -188,8 +177,6 @@ export default function SoloGamePage({ session, profile, isAdmin }) {
     setSwapIdx(null)
   }
 
-  // Remove a letter from the word area → its die returns to the rack at
-  // its current face. Sits there until the next Re-roll.
   function removeBuilderLetter(idx) {
     setState(s => ({
       ...s,
@@ -217,37 +204,18 @@ export default function SoloGamePage({ session, profile, isAdmin }) {
   }
 
   // Tap on a category cell. Either scores the current word (if it fits)
-  // or pivots the cell into "take a 0?" mode.
+  // or pivots the cell into "take a 0?" mode. Validation logic lives in
+  // evaluateScoreAttempt so MP shares the same rules.
   function tryScore(categoryId) {
     if (state.scores[categoryId]) return
     const cat = CATEGORIES.find(c => c.id === categoryId)
     if (!cat) return
-
-    // No word → ask for 0 inline
-    if (!builderWord) {
-      setZeroAskCategory(categoryId)
-      return
-    }
-    if (builderWord.length < 3) {
-      toast.error('Words must be at least 3 letters')
-      return
-    }
-    if (!dictReady) {
-      toast.error('Dictionary still loading…')
-      return
-    }
-    if (!isValidWord(builderWord, dict)) {
-      toast.error(`"${builderWord}" isn't in the dictionary`)
-      return
-    }
-    const ctx = { word: builderWord, faces: state.faces, score: builderScore }
-    const fits = cat.validate(ctx) &&
-      (categoryId !== 'lexicon' || isSpellableFromFaces(builderWord, state.faces).usedAll)
-    if (!fits) {
-      // Word doesn't fit this category → inline "take a 0?" prompt
-      setZeroAskCategory(categoryId)
-      return
-    }
+    const result = evaluateScoreAttempt({
+      builderWord, builderScore, faces: state.faces,
+      categoryId, dict, dictReady,
+    })
+    if (result.kind === 'reject') { toast.error(result.reason); return }
+    if (result.kind === 'ask-zero') { setZeroAskCategory(categoryId); return }
     applyScore(categoryId, builderWord, builderScore)
     toast.success(`+${builderScore} • ${cat.name}`)
   }
@@ -306,183 +274,38 @@ export default function SoloGamePage({ session, profile, isAdmin }) {
     >
       <div className="py-4 px-2 space-y-4">
 
-        {/* Scorecard */}
-        <div className="card p-3">
-          <h2 className="text-xs uppercase tracking-wide opacity-70 text-center mb-2">Scorecard</h2>
-          <div className="grid grid-cols-2 gap-1.5">
-            {CATEGORIES.map(cat => {
-              const filled = state.scores[cat.id]
-              const asking = zeroAskCategory === cat.id
+        <Scorecard
+          scores={state.scores}
+          onTryScore={tryScore}
+          disabled={isGameOver}
+          zeroAskCategory={zeroAskCategory}
+          onConfirmZero={confirmZero}
+          onCancelZero={cancelZero}
+          builderWord={builderWord}
+        />
 
-              if (asking && !filled) {
-                const reason = builderWord
-                  ? `${builderWord} doesn’t fit here.`
-                  : `No word yet.`
-                return (
-                  <div
-                    key={cat.id}
-                    className="rounded-lg px-2 py-1.5 border border-amber-400/60 bg-amber-900/30 text-xs"
-                  >
-                    <div className="font-bold mb-1">{cat.name}</div>
-                    <div className="text-amber-200 mb-1.5 text-[11px]">
-                      {reason} Take a 0?
-                    </div>
-                    <div className="flex gap-1.5">
-                      <button
-                        type="button"
-                        onClick={() => confirmZero(cat.id)}
-                        className="flex-1 rounded bg-amber-400 text-amber-950 font-bold py-1"
-                      >
-                        Take 0
-                      </button>
-                      <button
-                        type="button"
-                        onClick={cancelZero}
-                        className="flex-1 rounded border border-white/30 text-white py-1"
-                      >
-                        Cancel
-                      </button>
-                    </div>
-                  </div>
-                )
-              }
-
-              return (
-                <button
-                  key={cat.id}
-                  type="button"
-                  onClick={() => tryScore(cat.id)}
-                  disabled={!!filled || isGameOver}
-                  className={`text-left rounded-lg px-2 py-1.5 border text-xs transition ${
-                    filled
-                      ? 'border-green-600/40 bg-green-900/20 cursor-default'
-                      : 'border-white/10 hover:border-wordy-500 hover:bg-wordy-700/20'
-                  }`}
-                >
-                  <div className="font-bold">{cat.name}</div>
-                  {filled ? (
-                    <div className="text-green-400 mt-0.5">
-                      {filled.word ? `${filled.word} — ${filled.score} pts` : '— 0 pts'}
-                    </div>
-                  ) : (
-                    <div className="opacity-60 mt-0.5">{cat.desc}</div>
-                  )}
-                </button>
-              )
-            })}
-          </div>
-        </div>
-
-        {/* Word builder — always visible so layout doesn't shift */}
         {!isGameOver && (
-          <div className="card p-3">
-            <div className="flex items-center justify-between mb-2">
-              <div className="text-xs uppercase tracking-wide opacity-70">Your word</div>
-              {state.builder.length > 1 && (
-                <span className="text-[10px] opacity-50">tap two letters to swap</span>
-              )}
-            </div>
-            <div className="min-h-[44px] flex flex-wrap items-center gap-1.5 mb-2">
-              {state.builder.length === 0 ? (
-                <span className="text-sm opacity-50 self-center">
-                  {state.rollsThisTurn === 0
-                    ? 'Roll the dice to start'
-                    : 'Tap dice below to add letters here'}
-                </span>
-              ) : (
-                state.builder.map((b, i) => {
-                  const selected = swapIdx === i
-                  const value = LETTER_VALUES[b.letter]
-                  return (
-                    <div key={i} className="relative">
-                      <button
-                        type="button"
-                        onClick={() => tapBuilderLetter(i)}
-                        className={`tile tile-placed font-display text-xl w-9 h-9 ${selected ? 'tile-selected' : ''}`}
-                      >
-                        <span className="leading-none">{b.letter}</span>
-                        {value != null && (
-                          <span className="tile-value">{value}</span>
-                        )}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => removeBuilderLetter(i)}
-                        aria-label="Remove letter"
-                        className="absolute -top-1.5 -right-1.5 w-4 h-4 rounded-full bg-wordy-900 border border-white/30 text-[10px] leading-none flex items-center justify-center hover:bg-red-700"
-                      >
-                        ×
-                      </button>
-                    </div>
-                  )
-                })
-              )}
-            </div>
-            <div className="flex justify-between items-center text-xs opacity-70">
-              <span>{builderWord ? `${builderWord} • ${builderScore} pts` : ' '}</span>
-              {state.builder.length > 0 && (
-                <button onClick={clearBuilder} className="underline">clear</button>
-              )}
-            </div>
-          </div>
+          <WordBuilder
+            builder={state.builder}
+            rollsThisTurn={state.rollsThisTurn}
+            onTapLetter={tapBuilderLetter}
+            onRemoveLetter={removeBuilderLetter}
+            onClear={clearBuilder}
+            swapIdx={swapIdx}
+            builderWord={builderWord}
+            builderScore={builderScore}
+          />
         )}
 
-        {/* Rack + Roll button. Dice in the word area show as faded
-            placeholders so the rack keeps a stable 6-slot layout. */}
         {!isGameOver && (
-          <div className="card p-3">
-            <div className="text-xs uppercase tracking-wide opacity-70 mb-2 text-center">
-              {state.rollsThisTurn === 0
-                ? 'Roll the dice'
-                : 'Tap a die to move it into your word'}
-            </div>
-            <div className="flex justify-center gap-1.5 mb-3">
-              {state.faces.map((face, i) => {
-                const empty = face == null
-                const parked = inBuilder[i]
-                const isRolling = animating[i]
-                const value = face ? LETTER_VALUES[face] : null
-                return (
-                  <button
-                    key={i}
-                    type="button"
-                    onClick={() => empty || parked ? null : tapRackDie(i)}
-                    disabled={empty || parked}
-                    style={{ perspective: '400px' }}
-                    className={`tile font-display text-xl w-11 h-11 ${
-                      isRolling ? 'die-rolling' : ''
-                    } ${
-                      empty
-                        ? 'tile-disabled border-dashed'
-                        : parked
-                          ? 'tile-disabled border-dashed border-amber-400/40'
-                          : ''
-                    }`}
-                  >
-                    <span className="leading-none">{parked ? '·' : face ?? '·'}</span>
-                    {value != null && !parked && (
-                      <span className="tile-value">{value}</span>
-                    )}
-                  </button>
-                )
-              })}
-            </div>
-            <div className="flex items-center justify-center gap-3 min-h-[44px]">
-              <SQButton
-                variant="primary"
-                onClick={handleRoll}
-                disabled={
-                  state.rollsThisTurn >= ROLLS_PER_TURN ||
-                  inBuilder.every(Boolean)
-                }
-              >
-                {state.rollsThisTurn === 0 ? 'Roll' : 'Re-roll'}
-              </SQButton>
-              <span className="text-xs opacity-70 whitespace-nowrap">
-                Roll {Math.min(state.rollsThisTurn + 1, ROLLS_PER_TURN)}/{ROLLS_PER_TURN}
-              </span>
-            </div>
-          </div>
+          <DiceRack
+            faces={state.faces}
+            inBuilder={inBuilder}
+            animating={animating}
+            rollsThisTurn={state.rollsThisTurn}
+            onTapDie={tapRackDie}
+            onRoll={handleRoll}
+          />
         )}
 
         {isGameOver && (

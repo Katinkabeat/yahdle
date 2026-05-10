@@ -432,6 +432,28 @@ $$;
 
 grant execute on function public.yahdle_swap_letters(uuid, int, int) to authenticated;
 
+-- Clear the entire builder back to empty in one shot (matches solo's
+-- "clear" link). Server preserves faces[] so the rack stays as-is.
+create or replace function public.yahdle_clear_builder(
+  p_game_id uuid
+) returns void language plpgsql security definer as $$
+declare
+  v_uid    uuid := auth.uid();
+  v_game   record;
+  v_player record;
+begin
+  select * into v_game from public.yahdle_games where id = p_game_id;
+  if v_game.status <> 'active' then raise exception 'Game not active'; end if;
+  select * into v_player from public.yahdle_players where game_id = p_game_id and user_id = v_uid;
+  if v_player.player_index <> v_game.current_player_idx then raise exception 'Not your turn'; end if;
+  update public.yahdle_turn_state
+  set builder = '[]'::jsonb, updated_at = now()
+  where game_id = p_game_id and user_id = v_uid;
+end;
+$$;
+
+grant execute on function public.yahdle_clear_builder(uuid) to authenticated;
+
 -- ── 5. Score / take-zero / advance turn ──────────────────────
 
 -- Internal: advance turn + finalize if game complete.
