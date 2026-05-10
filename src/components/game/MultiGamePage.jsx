@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, useMemo } from 'react'
+import { useEffect, useState, useCallback, useMemo, useRef } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import toast from 'react-hot-toast'
 import {
@@ -81,6 +81,12 @@ export default function MultiGamePage({ session, profile, isAdmin }) {
   const builderScore = wordScore(builderWord)
 
   const [notFound, setNotFound] = useState(false)
+  // Counter of in-flight optimistic mutations to my turn state
+  // (park / unpark / swap / clear). While > 0, refresh() must not
+  // re-read yahdle_turn_state — a read-replica hit before the RPC
+  // commits would clobber the optimistic update and make the tile
+  // appear to jump rack → builder → rack → builder.
+  const pendingTurnMutations = useRef(0)
   const refresh = useCallback(async () => {
     if (!gameId) return
     try {
@@ -88,7 +94,7 @@ export default function MultiGamePage({ session, profile, isAdmin }) {
       if (!g) { setNotFound(true); return }
       setGame(g)
       setPlayers(ps)
-      if (userId) {
+      if (userId && pendingTurnMutations.current === 0) {
         const mts = await loadMyTurnState(gameId, userId)
         setMyTurnState(mts ?? { faces: [], builder: [], rolls_used: 0 })
       }
@@ -145,13 +151,23 @@ export default function MultiGamePage({ session, profile, isAdmin }) {
     })
   }
 
+  // Guard an optimistic mutation against the realtime/refresh loop:
+  // bump the counter before the RPC, decrement when it settles, so
+  // a mid-flight refresh() skips re-reading yahdle_turn_state.
+  function trackTurnMutation(promise) {
+    pendingTurnMutations.current += 1
+    return promise.finally(() => {
+      pendingTurnMutations.current = Math.max(0, pendingTurnMutations.current - 1)
+    })
+  }
+
   function tapRackDie(i) {
     if (!isMyTurn) return
     const letter = faces[i]
     if (letter == null || inBuilder[i]) return
     if ((myTurnState.builder?.length ?? 0) >= DIE_COUNT) return
     setMyTurnState(s => ({ ...s, builder: [...(s.builder ?? []), { letter, dieIdx: i }] }))
-    parkDie(gameId, i).catch(err => { toast.error(err.message || 'Failed'); refresh() })
+    trackTurnMutation(parkDie(gameId, i)).catch(err => { toast.error(err.message || 'Failed'); refresh() })
   }
 
   function tapBuilderLetter(idx) {
@@ -165,21 +181,21 @@ export default function MultiGamePage({ session, profile, isAdmin }) {
       const tmp = next[a]; next[a] = next[b]; next[b] = tmp
       return { ...s, builder: next }
     })
-    swapLetters(gameId, a, b).catch(err => { toast.error(err.message || 'Failed'); refresh() })
+    trackTurnMutation(swapLetters(gameId, a, b)).catch(err => { toast.error(err.message || 'Failed'); refresh() })
   }
 
   function removeBuilderLetter(idx) {
     if (!isMyTurn) return
     setSwapIdx(null)
     setMyTurnState(s => ({ ...s, builder: (s.builder ?? []).filter((_, i) => i !== idx) }))
-    unparkDie(gameId, idx).catch(err => { toast.error(err.message || 'Failed'); refresh() })
+    trackTurnMutation(unparkDie(gameId, idx)).catch(err => { toast.error(err.message || 'Failed'); refresh() })
   }
 
   function clearBuilder() {
     if (!isMyTurn) return
     setSwapIdx(null)
     setMyTurnState(s => ({ ...s, builder: [] }))
-    clearBuilderRpc(gameId).catch(err => { toast.error(err.message || 'Failed'); refresh() })
+    trackTurnMutation(clearBuilderRpc(gameId)).catch(err => { toast.error(err.message || 'Failed'); refresh() })
   }
 
   // Same validation flow as solo via the shared scoreValidation helper.
