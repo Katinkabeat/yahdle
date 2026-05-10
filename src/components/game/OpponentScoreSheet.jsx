@@ -2,8 +2,9 @@ import { useEffect } from 'react'
 import { CATEGORIES } from '../../lib/scoring.js'
 
 // Bottom-sheet popup over MultiGamePage. Shows opponent's full 12-cat
-// scorecard + last play. Last-played category is highlighted in pink-400
-// (matches SQ tile-selection ring).
+// scorecard + last play. Last-played category is highlighted with a
+// darker wordy-600 border ring on top of the standard light-purple
+// filled-cell treatment, to stay within the SQ purple palette.
 export default function OpponentScoreSheet({
   oppPlayer,
   oppProfile,
@@ -71,9 +72,9 @@ export default function OpponentScoreSheet({
             const base = 'rounded-lg px-2 py-1.5 border text-xs'
             let cls
             if (isLast && filled != null) {
-              cls = 'border-pink-400 bg-pink-400/15 ring-1 ring-pink-400/40 inset'
+              cls = 'border-2 border-wordy-600 bg-wordy-200 text-wordy-800'
             } else if (filled != null) {
-              cls = 'border-green-600/40 bg-green-900/20'
+              cls = 'border-wordy-300 bg-wordy-200 text-wordy-800'
             } else {
               cls = 'border-white/10 bg-white/[0.02] opacity-70'
             }
