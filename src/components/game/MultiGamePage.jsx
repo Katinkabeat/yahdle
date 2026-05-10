@@ -274,7 +274,7 @@ export default function MultiGamePage({ session, profile, isAdmin }) {
         />
       }
     >
-      <div className="py-4 px-2 space-y-4">
+      <div className="py-2 px-2 space-y-2">
 
         {notFound && (
           <div className="card p-4 text-center text-sm opacity-80">

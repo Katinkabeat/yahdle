@@ -272,7 +272,7 @@ export default function SoloGamePage({ session, profile, isAdmin }) {
         />
       }
     >
-      <div className="py-4 px-2 space-y-4">
+      <div className="py-2 px-2 space-y-2">
 
         <Scorecard
           scores={state.scores}

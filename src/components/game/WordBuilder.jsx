@@ -17,14 +17,14 @@ export default function WordBuilder({
   builderScore,
 }) {
   return (
-    <div className="card p-3">
-      <div className="flex items-center justify-between mb-2">
+    <div className="card p-2">
+      <div className="flex items-center justify-between mb-1">
         <div className="text-xs uppercase tracking-wide opacity-70">Your word</div>
         {builder.length > 1 && (
           <span className="text-[10px] opacity-50">tap two letters to swap</span>
         )}
       </div>
-      <div className="min-h-[44px] flex flex-wrap items-center gap-1.5 mb-2">
+      <div className="min-h-[44px] flex flex-wrap items-center gap-1.5 mb-1">
         {builder.length === 0 ? (
           <span className="text-sm opacity-50 self-center">
             {rollsThisTurn === 0

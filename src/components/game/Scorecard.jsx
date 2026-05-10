@@ -17,9 +17,9 @@ export default function Scorecard({
   builderWord,
 }) {
   return (
-    <div className="card p-3">
-      <h2 className="text-xs uppercase tracking-wide opacity-70 text-center mb-2">Scorecard</h2>
-      <div className="grid grid-cols-2 gap-1.5">
+    <div className="card p-2">
+      <h2 className="text-xs uppercase tracking-wide opacity-70 text-center mb-1">Scorecard</h2>
+      <div className="grid grid-cols-2 gap-1">
         {CATEGORIES.map(cat => {
           const filled = scores?.[cat.id]
           const asking = zeroAskCategory === cat.id
@@ -63,7 +63,7 @@ export default function Scorecard({
               type="button"
               onClick={() => onTryScore(cat.id)}
               disabled={!!filled || disabled}
-              className={`text-left rounded-lg px-2 py-1.5 border text-xs transition ${
+              className={`text-left rounded-lg px-2 py-1 border text-xs transition ${
                 filled
                   ? 'border-green-600/40 bg-green-900/20 cursor-default'
                   : disabled
@@ -73,11 +73,11 @@ export default function Scorecard({
             >
               <div className="font-bold">{cat.name}</div>
               {filled ? (
-                <div className="text-green-400 mt-0.5">
+                <div className="text-green-400 text-[10px]">
                   {filled.word ? `${filled.word} — ${filled.score} pts` : `— ${filled.score} pts`}
                 </div>
               ) : (
-                <div className="opacity-60 mt-0.5">{cat.desc}</div>
+                <div className="opacity-60 text-[10px]">{cat.desc}</div>
               )}
             </button>
           )

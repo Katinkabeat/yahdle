@@ -27,13 +27,13 @@ export default function DiceRack({
   const rollDisabled = disabled || rollsThisTurn >= ROLLS_PER_TURN || allParked
 
   return (
-    <div className="card p-3">
-      <div className="text-xs uppercase tracking-wide opacity-70 mb-2 text-center">
+    <div className="card p-2">
+      <div className="text-xs uppercase tracking-wide opacity-70 mb-1 text-center">
         {rollsThisTurn === 0
           ? 'Roll the dice'
           : 'Tap a die to move it into your word'}
       </div>
-      <div className="flex justify-center gap-1.5 mb-3">
+      <div className="flex justify-center gap-1.5 mb-2">
         {(faces ?? []).map((face, i) => {
           const empty = face == null
           const parked = inBuilder[i]
