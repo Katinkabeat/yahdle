@@ -63,9 +63,9 @@ export default function Scorecard({
               type="button"
               onClick={() => onTryScore(cat.id)}
               disabled={!!filled || disabled}
-              className={`text-left rounded-lg px-2 py-1 border text-xs transition ${
+              className={`text-left rounded-lg px-2 py-1 border text-xs transition text-wordy-700 ${
                 filled
-                  ? 'border-wordy-300 bg-wordy-200 text-wordy-700 cursor-default'
+                  ? 'border-wordy-300 bg-wordy-200 cursor-default'
                   : disabled
                     ? 'border-white/5 opacity-60 cursor-not-allowed'
                     : 'border-white/10 hover:border-wordy-500 hover:bg-wordy-700/20'
@@ -73,7 +73,7 @@ export default function Scorecard({
             >
               <div className="font-bold">{cat.name}</div>
               {filled ? (
-                <div className="text-wordy-700 text-[10px] font-bold">
+                <div className="text-[10px] font-bold">
                   {filled.word ? `${filled.word} — ${filled.score} pts` : `— ${filled.score} pts`}
                 </div>
               ) : (
