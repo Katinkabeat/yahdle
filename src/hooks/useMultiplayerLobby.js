@@ -3,15 +3,19 @@ import { supabase } from '../lib/supabase.js'
 import { useRealtimeChannel } from './useRealtimeChannel.js'
 
 // Loads the current user's Yahdle multiplayer lobby state:
-//   pendingInvites — games where I'm invited and haven't accepted
+//   pendingInvites — friend invites where I'm invited and haven't accepted
+//   sentInvites    — games I created and am waiting on (friend or open)
 //   activeGames    — games in progress involving me
 //   completed      — last 10 finished games involving me
+//   openGames      — open (no invitee) waiting games NOT created by me,
+//                    available to join via yahdle_join_open_game
 // Returns { ...lists, opponents (id→profile), loading, reload }.
 export function useMultiplayerLobby(userId) {
   const [pendingInvites, setPendingInvites] = useState([])
   const [sentInvites, setSentInvites] = useState([])
   const [activeGames, setActiveGames] = useState([])
   const [completed, setCompleted] = useState([])
+  const [openGames, setOpenGames] = useState([])
   const [opponents, setOpponents] = useState({})
   const [loading, setLoading] = useState(true)
   const initialLoadDone = useRef(false)
@@ -30,11 +34,15 @@ export function useMultiplayerLobby(userId) {
         supabase.rpc('yahdle_expire_stale_invites').then(() => {}, () => {})
       }
 
-      const { data: games, error: gErr } = await supabase
-        .from('yahdle_games')
-        .select('*, yahdle_players(*)')
-        .or(`created_by.eq.${userId},invited_user_id.eq.${userId}`)
-        .order('last_activity_at', { ascending: false })
+      // My games + open games I might join. Single round-trip.
+      const [{ data: games, error: gErr }, { data: open }] = await Promise.all([
+        supabase
+          .from('yahdle_games')
+          .select('*, yahdle_players(*)')
+          .or(`created_by.eq.${userId},invited_user_id.eq.${userId}`)
+          .order('last_activity_at', { ascending: false }),
+        supabase.rpc('yahdle_list_open_games'),
+      ])
       if (gErr) throw gErr
 
       const list = games ?? []
@@ -42,8 +50,11 @@ export function useMultiplayerLobby(userId) {
       const sent    = list.filter(g => g.status === 'waiting' && g.created_by === userId)
       const active = list.filter(g => g.status === 'active')
       const finished = list.filter(g => g.status === 'finished').slice(0, 10)
+      const openList = open ?? []
 
-      // Collect opponent ids for profile lookup.
+      // Collect opponent ids for profile lookup. Open-games creator
+      // profiles already come back via yahdle_list_open_games, so we
+      // only need to look up profiles for "my games" here.
       const otherIds = new Set()
       for (const g of list) {
         if (g.created_by && g.created_by !== userId) otherIds.add(g.created_by)
@@ -63,6 +74,7 @@ export function useMultiplayerLobby(userId) {
       setSentInvites(sent)
       setActiveGames(active)
       setCompleted(finished)
+      setOpenGames(openList)
       setOpponents(oppMap)
     } catch (err) {
       console.error('[useMultiplayerLobby] failed', err)
@@ -86,5 +98,5 @@ export function useMultiplayerLobby(userId) {
     enabled: !!userId,
   })
 
-  return { pendingInvites, sentInvites, activeGames, completed, opponents, loading, reload }
+  return { pendingInvites, sentInvites, activeGames, completed, openGames, opponents, loading, reload }
 }

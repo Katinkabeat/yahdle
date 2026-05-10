@@ -1,16 +1,18 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import toast from 'react-hot-toast'
-import { acceptInvite, declineInvite, cancelInvite } from '../../lib/multiplayerActions.js'
+import { acceptInvite, declineInvite, cancelInvite, joinOpenGame } from '../../lib/multiplayerActions.js'
 import CreateGameSheet from './CreateGameSheet.jsx'
 
-// Yahdle MP lobby card. Pending invites first, your-turn second, waiting third.
-// Lobby data is fetched once in LobbyPage via useMultiplayerLobby and passed in.
+// Yahdle MP lobby card. Pending invites first, your-turn second, waiting
+// third, joinable open games last. Lobby data is fetched once in
+// LobbyPage via useMultiplayerLobby and passed in.
 export default function MultiplayerCard({
   user,
   pendingInvites = [],
   sentInvites = [],
   activeGames = [],
+  openGames = [],
   opponents = {},
   loading = false,
 }) {
@@ -50,6 +52,16 @@ export default function MultiplayerCard({
     }
   }
 
+  async function handleJoinOpen(gameId) {
+    try {
+      await joinOpenGame(gameId)
+      toast.success('Game on!')
+      navigate(`/multi/${gameId}`)
+    } catch (err) {
+      toast.error(err.message || 'Failed to join')
+    }
+  }
+
   // Split active games into your-turn / waiting-on-opponent.
   const yourTurn = []
   const waiting = []
@@ -77,9 +89,9 @@ export default function MultiplayerCard({
 
         {loading && <p className="text-sm opacity-60 text-center py-2">Loading…</p>}
 
-        {(pendingInvites.length === 0 && sentInvites.length === 0 && yourTurn.length === 0 && waiting.length === 0 && !loading) && (
+        {(pendingInvites.length === 0 && sentInvites.length === 0 && yourTurn.length === 0 && waiting.length === 0 && openGames.length === 0 && !loading) && (
           <p className="text-sm text-wordy-400 text-center py-2">
-            No active games — invite a friend to start one.
+            No active games — start an open game or invite a friend.
           </p>
         )}
 
@@ -115,20 +127,25 @@ export default function MultiplayerCard({
           })}
 
           {sentInvites.map(g => {
-            const opp = opponents[g.invited_user_id]
+            const isOpen = !g.invited_user_id
+            const opp = isOpen ? null : opponents[g.invited_user_id]
+            const title = isOpen ? '🎲 Your open game' : (opp?.username ?? 'Opponent')
+            const subtitle = isOpen
+              ? '⏳ Waiting for someone to join'
+              : '⏳ Waiting for them to accept'
             return (
               <div
                 key={g.id}
                 className="flex items-center justify-between rounded-xl px-3 py-2 border bg-wordy-50 border-wordy-100 dark:bg-[#1a1130] dark:border-[#2d1b55]"
               >
                 <div className="min-w-0">
-                  <div className="text-sm font-semibold truncate">{opp?.username ?? 'Opponent'}</div>
-                  <p className="text-xs text-wordy-400 mt-0.5">⏳ Waiting for them to accept</p>
+                  <div className="text-sm font-semibold truncate">{title}</div>
+                  <p className="text-xs text-wordy-400 mt-0.5">{subtitle}</p>
                 </div>
                 <button
                   onClick={() => handleCancel(g.id)}
                   className="w-7 h-7 grid place-items-center rounded-full text-wordy-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 shrink-0"
-                  aria-label="Cancel invite"
+                  aria-label={isOpen ? 'Cancel open game' : 'Cancel invite'}
                 >
                   ×
                 </button>
@@ -159,6 +176,34 @@ export default function MultiplayerCard({
               </button>
             )
           })}
+
+          {openGames.map(g => (
+            <div
+              key={g.id}
+              className="flex items-center justify-between rounded-xl px-3 py-2 border bg-wordy-50 border-wordy-100 dark:bg-[#1a1130] dark:border-[#2d1b55]"
+            >
+              <div className="min-w-0 flex items-center gap-2">
+                <div
+                  className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold text-white shrink-0"
+                  style={{ background: `hsl(${g.creator_avatar_hue ?? 270} 50% 50%)` }}
+                >
+                  {g.creator_username?.[0]?.toUpperCase() ?? '?'}
+                </div>
+                <div className="min-w-0">
+                  <div className="text-sm font-semibold truncate">
+                    {g.creator_username ?? 'Someone'}
+                  </div>
+                  <p className="text-xs text-wordy-400 mt-0.5">🎲 Open game · waiting</p>
+                </div>
+              </div>
+              <button
+                onClick={() => handleJoinOpen(g.id)}
+                className="text-xs px-3 py-1.5 rounded-lg font-bold btn-primary bg-amber-500 hover:bg-amber-600 shrink-0"
+              >
+                Join
+              </button>
+            </div>
+          ))}
 
           {waiting.map(g => {
             const opp = opponentOf(g)

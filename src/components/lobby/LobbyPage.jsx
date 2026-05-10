@@ -10,7 +10,7 @@ import { useMultiplayerLobby } from '../../hooks/useMultiplayerLobby.js'
 export default function LobbyPage({ session, profile, isAdmin }) {
   const navigate = useNavigate()
   const user = session?.user
-  const { pendingInvites, sentInvites, activeGames, completed, opponents, loading } = useMultiplayerLobby(user?.id)
+  const { pendingInvites, sentInvites, activeGames, completed, openGames, opponents, loading } = useMultiplayerLobby(user?.id)
 
   const completedGames = completed.map(g => {
     const oppId = g.created_by === user?.id ? g.invited_user_id : g.created_by
@@ -55,6 +55,7 @@ export default function LobbyPage({ session, profile, isAdmin }) {
         pendingInvites={pendingInvites}
         sentInvites={sentInvites}
         activeGames={activeGames}
+        openGames={openGames}
         opponents={opponents}
         loading={loading}
       />

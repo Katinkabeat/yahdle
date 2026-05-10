@@ -3,9 +3,11 @@ import { supabase } from './supabase.js'
 // Thin wrappers around the Yahdle multiplayer RPCs. All game state
 // mutations go server-side (SECDEF) — this file just relays.
 
+// invitedUserId may be null to create an OPEN game any user can join.
+// Server caps one open game per creator at a time.
 export async function createGame(invitedUserId) {
   const { data, error } = await supabase.rpc('yahdle_create_game', {
-    p_invited_user_id: invitedUserId,
+    p_invited_user_id: invitedUserId ?? null,
   })
   if (error) throw error
   return { gameId: data }
@@ -14,6 +16,20 @@ export async function createGame(invitedUserId) {
 export async function acceptInvite(gameId) {
   const { error } = await supabase.rpc('yahdle_accept_invite', { p_game_id: gameId })
   if (error) throw error
+}
+
+// Join someone else's open game. Server flips status→active and sets
+// invited_user_id = the joiner so the rest of the schema (RLS, push
+// triggers, pending_for) keeps working unchanged.
+export async function joinOpenGame(gameId) {
+  const { error } = await supabase.rpc('yahdle_join_open_game', { p_game_id: gameId })
+  if (error) throw error
+}
+
+export async function listOpenGames() {
+  const { data, error } = await supabase.rpc('yahdle_list_open_games')
+  if (error) throw error
+  return data ?? []
 }
 
 export async function declineInvite(gameId) {
