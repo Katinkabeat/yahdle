@@ -92,15 +92,16 @@ end;
 $$;
 
 -- Roll a single die using server-side random(). Returns the chosen face.
+-- 2D arrays in Postgres can't be sliced with single-index notation
+-- (`arr[i]` returns null on a text[][]) — must index both dimensions
+-- in one access.
 create or replace function public.yahdle_roll_one_die(p_die_idx int)
 returns text language plpgsql volatile as $$
 declare
-  faces  text[];
-  n_faces int;
+  face_idx int;
 begin
-  faces   := (public.yahdle_dice_faces())[p_die_idx + 1];
-  n_faces := array_length(faces, 1);
-  return faces[1 + floor(random() * n_faces)::int];
+  face_idx := 1 + floor(random() * 8)::int;
+  return (public.yahdle_dice_faces())[p_die_idx + 1][face_idx];
 end;
 $$;
 
