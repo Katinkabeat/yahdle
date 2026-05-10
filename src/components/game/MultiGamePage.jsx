@@ -81,12 +81,23 @@ export default function MultiGamePage({ session, profile, isAdmin }) {
   const builderScore = wordScore(builderWord)
 
   const [notFound, setNotFound] = useState(false)
-  // Generation token for my turn state. Bumped on every optimistic
-  // mutation (park/unpark/swap/clear). A loadMyTurnState() that
-  // started before a mutation can resolve AFTER the optimistic
-  // setState and would otherwise clobber it (rack→builder→rack→builder
-  // flicker). Each refresh captures the generation at start; if it
-  // changed by the time the read returns, we discard the result.
+  // Race-protection for my turn state. The flicker has TWO independent
+  // sources, so we use TWO mechanisms:
+  //
+  //   pendingTurnMutations: counts in-flight optimistic RPCs (park /
+  //     unpark / swap / clear). While > 0, refresh() must NOT load
+  //     turn_state — the RPC may not have committed server-side yet,
+  //     so a read would return the pre-tap state and overwrite the
+  //     optimistic update. The trigger that fires our own realtime
+  //     refresh (via yahdle_games.last_activity_at) lands faster than
+  //     pgrest's read-after-commit on rare occasions.
+  //
+  //   turnStateGen: bumped on every optimistic mutation. A refresh
+  //     captures the value at start; if a mutation lands during the
+  //     read, the captured value mismatches and the result is
+  //     discarded. Catches the case where the user taps while a
+  //     refresh is mid-flight.
+  const pendingTurnMutations = useRef(0)
   const turnStateGen = useRef(0)
   const refresh = useCallback(async () => {
     if (!gameId) return
@@ -95,10 +106,11 @@ export default function MultiGamePage({ session, profile, isAdmin }) {
       if (!g) { setNotFound(true); return }
       setGame(g)
       setPlayers(ps)
-      if (userId) {
+      if (userId && pendingTurnMutations.current === 0) {
         const genAtStart = turnStateGen.current
         const mts = await loadMyTurnState(gameId, userId)
-        if (turnStateGen.current !== genAtStart) return // stale, discard
+        if (turnStateGen.current !== genAtStart) return
+        if (pendingTurnMutations.current > 0) return
         setMyTurnState(mts ?? { faces: [], builder: [], rolls_used: 0 })
       }
     } catch (err) {
@@ -154,11 +166,16 @@ export default function MultiGamePage({ session, profile, isAdmin }) {
     })
   }
 
-  // Bump the generation immediately before kicking off an RPC so any
-  // in-flight loadMyTurnState() discards its stale result.
+  // Wrap every optimistic RPC: bump gen + pending-counter immediately
+  // (so concurrent refreshes skip / discard), and after the LAST
+  // mutation settles, run one refresh to sync from the server.
   function trackTurnMutation(promise) {
     turnStateGen.current += 1
-    return promise
+    pendingTurnMutations.current += 1
+    return promise.finally(() => {
+      pendingTurnMutations.current = Math.max(0, pendingTurnMutations.current - 1)
+      if (pendingTurnMutations.current === 0) refresh()
+    })
   }
 
   function tapRackDie(i) {
