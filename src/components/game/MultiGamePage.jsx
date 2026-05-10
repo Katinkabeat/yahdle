@@ -113,31 +113,39 @@ export default function MultiGamePage({ session, profile, isAdmin }) {
     })
   }
 
+  // Optimistic helpers — update local state immediately, sync with the
+  // server in the background. On error we toast and refresh from the
+  // server to recover. Roll/score still go through withBusy because
+  // they need the server's new state (dice values, turn advance).
   function tapRackDie(i) {
     if (!isMyTurn) return
-    if (myTurnState.faces?.[i] == null) return
+    const letter = myTurnState.faces?.[i]
+    if (letter == null) return
     if (inBuilderSet.has(i)) return
     if ((myTurnState.builder?.length ?? 0) >= DIE_COUNT) return
-    withBusy(() => parkDie(gameId, i))
+    setMyTurnState(s => ({ ...s, builder: [...(s.builder ?? []), { letter, dieIdx: i }] }))
+    parkDie(gameId, i).catch(err => { toast.error(err.message || 'Failed'); refresh() })
   }
 
   function tapBuilderLetter(idx) {
     if (!isMyTurn) return
-    if (swapIdx == null) {
-      setSwapIdx(idx); return
-    }
-    if (swapIdx === idx) {
-      setSwapIdx(null); return
-    }
+    if (swapIdx == null) { setSwapIdx(idx); return }
+    if (swapIdx === idx) { setSwapIdx(null); return }
     const a = swapIdx, b = idx
     setSwapIdx(null)
-    withBusy(() => swapLetters(gameId, a, b))
+    setMyTurnState(s => {
+      const next = [...(s.builder ?? [])]
+      const tmp = next[a]; next[a] = next[b]; next[b] = tmp
+      return { ...s, builder: next }
+    })
+    swapLetters(gameId, a, b).catch(err => { toast.error(err.message || 'Failed'); refresh() })
   }
 
   function removeFromBuilder(idx) {
     if (!isMyTurn) return
     setSwapIdx(null)
-    withBusy(() => unparkDie(gameId, idx))
+    setMyTurnState(s => ({ ...s, builder: (s.builder ?? []).filter((_, i) => i !== idx) }))
+    unparkDie(gameId, idx).catch(err => { toast.error(err.message || 'Failed'); refresh() })
   }
 
   function tryScore(categoryId) {
@@ -274,7 +282,8 @@ export default function MultiGamePage({ session, profile, isAdmin }) {
               <div className="grid grid-cols-2 gap-1">
                 {CATEGORIES.map(cat => {
                   const filled = myPlayer?.scores?.[cat.id]
-                  const filledNum = filled != null ? Number(filled) : null
+                  const filledNum = filled?.score ?? null
+                  const filledWord = filled?.word ?? null
                   const asking = zeroAskCategory === cat.id
                   if (asking && filled == null) {
                     const reason = builderWord
@@ -307,7 +316,9 @@ export default function MultiGamePage({ session, profile, isAdmin }) {
                     >
                       <div className="font-bold">{cat.name}</div>
                       {filled != null ? (
-                        <div className="text-green-300 font-bold text-sm">{filledNum}</div>
+                        <div className="text-green-400 mt-0.5">
+                          {filledWord ? `${filledWord} — ${filledNum} pts` : `— ${filledNum} pts`}
+                        </div>
                       ) : (
                         <div className="opacity-60 text-[11px]">{cat.desc}</div>
                       )}

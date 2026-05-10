@@ -591,8 +591,10 @@ begin
 
   v_score := public.yahdle_word_score(v_word);
 
+  -- scores stores {category_id: {word, score}} so the scorecard can show
+  -- the word that earned each category (matches solo Yahdle's display).
   update public.yahdle_players
-  set scores        = scores || jsonb_build_object(p_category_id, v_score),
+  set scores        = scores || jsonb_build_object(p_category_id, jsonb_build_object('word', v_word, 'score', v_score)),
       total_score   = total_score + v_score,
       last_word     = v_word,
       last_category = p_category_id,
@@ -626,7 +628,7 @@ begin
   end if;
 
   update public.yahdle_players
-  set scores        = scores || jsonb_build_object(p_category_id, 0),
+  set scores        = scores || jsonb_build_object(p_category_id, jsonb_build_object('word', null, 'score', 0)),
       last_word     = null,
       last_category = p_category_id,
       last_score    = 0

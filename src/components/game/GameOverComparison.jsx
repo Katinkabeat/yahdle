@@ -49,8 +49,8 @@ export default function GameOverComparison({
         {CATEGORIES.map((cat, i) => {
           const my = myPlayer?.scores?.[cat.id] ?? null
           const op = oppPlayer?.scores?.[cat.id] ?? null
-          const myN = my != null ? Number(my) : null
-          const opN = op != null ? Number(op) : null
+          const myN = my?.score ?? null
+          const opN = op?.score ?? null
           const meWin = myN != null && opN != null && myN > opN
           const themWin = opN != null && myN != null && opN > myN
           const alt = i % 2 === 1

@@ -65,7 +65,8 @@ export default function OpponentScoreSheet({
         <div className="grid grid-cols-2 gap-1.5">
           {CATEGORIES.map(cat => {
             const filled = oppPlayer?.scores?.[cat.id]
-            const filledNum = filled != null ? Number(filled) : null
+            const filledNum = filled?.score ?? null
+            const filledWord = filled?.word ?? null
             const isLast = cat.id === lastCat
             const base = 'rounded-lg px-2 py-1.5 border text-xs'
             let cls
@@ -80,7 +81,7 @@ export default function OpponentScoreSheet({
               <div key={cat.id} className={`${base} ${cls}`}>
                 <div className="font-bold">{cat.name}</div>
                 {filled != null
-                  ? <div className="font-bold text-sm">{filledNum}</div>
+                  ? <div className="font-bold text-sm">{filledWord ? `${filledWord} — ${filledNum}` : filledNum}</div>
                   : <div className="opacity-60 text-[11px]">—</div>}
               </div>
             )
