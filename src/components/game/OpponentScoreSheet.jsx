@@ -52,7 +52,7 @@ export default function OpponentScoreSheet({
             <div className="text-[10px] uppercase tracking-wide opacity-55 font-bold mb-1">Last play</div>
             <div className="flex gap-1 justify-center mb-1">
               {lastWord.split('').map((ch, i) => (
-                <div key={i} className="w-8 h-8 rounded-md font-extrabold text-base flex items-center justify-center bg-gradient-to-b from-stone-100 to-stone-300 text-stone-900">{ch}</div>
+                <div key={i} className="tile tile-placed font-display text-base w-8 h-8">{ch}</div>
               ))}
             </div>
             <div className="text-[11px] opacity-70 text-center mb-3">"{lastWord}" → {lastCatName} · {lastScore} pts</div>

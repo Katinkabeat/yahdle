@@ -398,17 +398,11 @@ export default function SoloGamePage({ session, profile, isAdmin }) {
                       <button
                         type="button"
                         onClick={() => tapBuilderLetter(i)}
-                        className={`relative font-display text-xl rounded px-2 py-1 min-w-[36px] border-2 transition ${
-                          selected
-                            ? 'border-amber-400 bg-amber-700 text-amber-100'
-                            : 'border-transparent bg-wordy-700 text-white'
-                        }`}
+                        className={`tile tile-placed font-display text-xl w-9 h-9 ${selected ? 'tile-selected' : ''}`}
                       >
                         <span className="leading-none">{b.letter}</span>
                         {value != null && (
-                          <span className="absolute bottom-0.5 right-1 text-[9px] font-bold leading-none opacity-70">
-                            {value}
-                          </span>
+                          <span className="tile-value">{value}</span>
                         )}
                       </button>
                       <button
@@ -455,21 +449,19 @@ export default function SoloGamePage({ session, profile, isAdmin }) {
                     onClick={() => empty || parked ? null : tapRackDie(i)}
                     disabled={empty || parked}
                     style={{ perspective: '400px' }}
-                    className={`relative w-11 h-11 rounded-lg font-display text-xl flex items-center justify-center border-2 ${
+                    className={`tile font-display text-xl w-11 h-11 ${
                       isRolling ? 'die-rolling' : ''
                     } ${
                       empty
-                        ? 'border-dashed border-white/20 opacity-40'
+                        ? 'tile-disabled border-dashed'
                         : parked
-                          ? 'border-dashed border-amber-400/40 opacity-30'
-                          : 'border-white/20 bg-wordy-900/40 hover:border-wordy-400'
+                          ? 'tile-disabled border-dashed border-amber-400/40'
+                          : ''
                     }`}
                   >
                     <span className="leading-none">{parked ? '·' : face ?? '·'}</span>
                     {value != null && !parked && (
-                      <span className="absolute bottom-0.5 right-1 text-[9px] font-bold leading-none opacity-70">
-                        {value}
-                      </span>
+                      <span className="tile-value">{value}</span>
                     )}
                   </button>
                 )

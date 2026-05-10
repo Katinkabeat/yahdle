@@ -231,7 +231,7 @@ export default function MultiGamePage({ session, profile, isAdmin }) {
         />
       }
     >
-      <div className="py-4 px-2 space-y-4">
+      <div className="py-2 px-2 space-y-2">
 
         {/* score pills */}
         {game && (
@@ -270,9 +270,8 @@ export default function MultiGamePage({ session, profile, isAdmin }) {
         {!isGameOver && game?.status === 'active' && (
           <>
             {/* My scorecard */}
-            <div className="card p-3">
-              <h2 className="text-xs uppercase tracking-wide opacity-70 text-center mb-2">Your scorecard</h2>
-              <div className="grid grid-cols-2 gap-1.5">
+            <div className="card p-2">
+              <div className="grid grid-cols-2 gap-1">
                 {CATEGORIES.map(cat => {
                   const filled = myPlayer?.scores?.[cat.id]
                   const filledNum = filled != null ? Number(filled) : null
@@ -322,62 +321,65 @@ export default function MultiGamePage({ session, profile, isAdmin }) {
               <>
                 {/* Word area */}
                 <div className="card p-2">
-                  <div className="text-[10px] uppercase tracking-wide opacity-55 font-bold mb-1.5 px-1 flex justify-between">
-                    <span>Word</span>
-                    {builderWord && <span>{builderWord} · {builderScore} pts</span>}
+                  <div className="flex gap-1 justify-center flex-wrap min-h-[36px]">
+                    {(myTurnState.builder?.length ?? 0) === 0 ? (
+                      <span className="text-xs opacity-50 self-center">
+                        {(myTurnState.rolls_used ?? 0) === 0 ? 'Roll the dice to start' : 'Tap a die to add to your word'}
+                      </span>
+                    ) : (
+                      myTurnState.builder.map((tile, i) => {
+                        const isSwap = swapIdx === i
+                        const value = wordScore(tile.letter)
+                        return (
+                          <div key={i} className="relative">
+                            <button
+                              type="button"
+                              onClick={() => tapBuilderLetter(i)}
+                              className={`tile tile-placed font-display text-xl w-9 h-9 ${isSwap ? 'tile-selected' : ''}`}
+                            >
+                              <span className="leading-none">{tile.letter}</span>
+                              {value != null && <span className="tile-value">{value}</span>}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => removeFromBuilder(i)}
+                              className="absolute -top-1.5 -right-1.5 w-4 h-4 rounded-full bg-wordy-900 border border-white/30 text-[10px] leading-none flex items-center justify-center hover:bg-red-700"
+                              aria-label="Remove letter"
+                            >×</button>
+                          </div>
+                        )
+                      })
+                    )}
                   </div>
-                  <div className="flex gap-1.5 justify-center flex-wrap">
-                    {Array.from({ length: DIE_COUNT }).map((_, i) => {
-                      const tile = myTurnState.builder?.[i]
-                      if (!tile) {
-                        return <div key={i} className="w-9 h-9 rounded-lg border border-dashed border-white/20 flex items-center justify-center text-white/30">·</div>
-                      }
-                      const isSwap = swapIdx === i
-                      return (
-                        <div key={i} className="relative">
-                          <button
-                            type="button"
-                            onClick={() => tapBuilderLetter(i)}
-                            className={`w-9 h-9 rounded-lg font-extrabold text-lg flex items-center justify-center bg-gradient-to-b from-stone-100 to-stone-300 text-stone-900 ${isSwap ? 'ring-2 ring-amber-400' : ''}`}
-                          >
-                            {tile.letter}
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => removeFromBuilder(i)}
-                            className="absolute -top-1.5 -right-1.5 w-4 h-4 rounded-full bg-red-500 text-white text-[9px] font-bold leading-none flex items-center justify-center"
-                            aria-label="Remove letter"
-                          >×</button>
-                        </div>
-                      )
-                    })}
-                  </div>
+                  {builderWord && (
+                    <div className="text-[10px] opacity-60 text-center mt-1">{builderWord} · {builderScore} pts</div>
+                  )}
                 </div>
 
                 {/* Dice rack */}
                 <div className="card p-2">
-                  <div className="text-[10px] uppercase tracking-wide opacity-55 font-bold mb-1.5 px-1">
-                    Dice (tap to lock into word)
-                  </div>
-                  <div className="flex gap-1.5 justify-center flex-wrap">
+                  <div className="flex gap-1 justify-center flex-wrap min-h-[44px]">
                     {(myTurnState.faces ?? []).map((face, i) => {
                       if (inBuilderSet.has(i) || face == null) return null
+                      const value = wordScore(face)
                       return (
                         <button
                           key={i}
                           type="button"
                           onClick={() => tapRackDie(i)}
-                          className={`w-11 h-11 rounded-xl font-extrabold text-xl flex items-center justify-center bg-gradient-to-b from-stone-100 to-stone-300 text-stone-900 shadow-md ${animating[i] ? 'die-rolling' : ''}`}
+                          style={{ perspective: '400px' }}
+                          className={`tile font-display text-xl w-11 h-11 ${animating[i] ? 'die-rolling' : ''}`}
                         >
-                          {face}
+                          <span className="leading-none">{face}</span>
+                          {value != null && <span className="tile-value">{value}</span>}
                         </button>
                       )
                     })}
-                    {(myTurnState.faces ?? []).every((_, i) => inBuilderSet.has(i)) && (
-                      <div className="text-xs opacity-60 py-3">All dice locked into your word.</div>
+                    {(myTurnState.faces ?? []).length > 0 && (myTurnState.faces ?? []).every((_, i) => inBuilderSet.has(i)) && (
+                      <div className="text-xs opacity-60 self-center">All dice in your word.</div>
                     )}
                     {(myTurnState.faces ?? []).length === 0 && (
-                      <div className="text-xs opacity-60 py-3">Tap "Roll" to start your turn.</div>
+                      <div className="text-xs opacity-60 self-center">Tap Roll to start your turn.</div>
                     )}
                   </div>
                 </div>
