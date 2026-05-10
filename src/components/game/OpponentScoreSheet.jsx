@@ -72,9 +72,9 @@ export default function OpponentScoreSheet({
             const base = 'rounded-lg px-2 py-1.5 border text-xs'
             let cls
             if (isLast && filled != null) {
-              cls = 'border-2 border-wordy-600 bg-wordy-200 text-wordy-800'
+              cls = 'border-2 border-wordy-600 bg-wordy-200 text-wordy-700'
             } else if (filled != null) {
-              cls = 'border-wordy-300 bg-wordy-200 text-wordy-800'
+              cls = 'border-wordy-300 bg-wordy-200 text-wordy-700'
             } else {
               cls = 'border-white/10 bg-white/[0.02] opacity-70'
             }
