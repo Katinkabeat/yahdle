@@ -81,12 +81,13 @@ export default function MultiGamePage({ session, profile, isAdmin }) {
   const builderScore = wordScore(builderWord)
 
   const [notFound, setNotFound] = useState(false)
-  // Counter of in-flight optimistic mutations to my turn state
-  // (park / unpark / swap / clear). While > 0, refresh() must not
-  // re-read yahdle_turn_state — a read-replica hit before the RPC
-  // commits would clobber the optimistic update and make the tile
-  // appear to jump rack → builder → rack → builder.
-  const pendingTurnMutations = useRef(0)
+  // Generation token for my turn state. Bumped on every optimistic
+  // mutation (park/unpark/swap/clear). A loadMyTurnState() that
+  // started before a mutation can resolve AFTER the optimistic
+  // setState and would otherwise clobber it (rack→builder→rack→builder
+  // flicker). Each refresh captures the generation at start; if it
+  // changed by the time the read returns, we discard the result.
+  const turnStateGen = useRef(0)
   const refresh = useCallback(async () => {
     if (!gameId) return
     try {
@@ -94,8 +95,10 @@ export default function MultiGamePage({ session, profile, isAdmin }) {
       if (!g) { setNotFound(true); return }
       setGame(g)
       setPlayers(ps)
-      if (userId && pendingTurnMutations.current === 0) {
+      if (userId) {
+        const genAtStart = turnStateGen.current
         const mts = await loadMyTurnState(gameId, userId)
+        if (turnStateGen.current !== genAtStart) return // stale, discard
         setMyTurnState(mts ?? { faces: [], builder: [], rolls_used: 0 })
       }
     } catch (err) {
@@ -151,14 +154,11 @@ export default function MultiGamePage({ session, profile, isAdmin }) {
     })
   }
 
-  // Guard an optimistic mutation against the realtime/refresh loop:
-  // bump the counter before the RPC, decrement when it settles, so
-  // a mid-flight refresh() skips re-reading yahdle_turn_state.
+  // Bump the generation immediately before kicking off an RPC so any
+  // in-flight loadMyTurnState() discards its stale result.
   function trackTurnMutation(promise) {
-    pendingTurnMutations.current += 1
-    return promise.finally(() => {
-      pendingTurnMutations.current = Math.max(0, pendingTurnMutations.current - 1)
-    })
+    turnStateGen.current += 1
+    return promise
   }
 
   function tapRackDie(i) {
