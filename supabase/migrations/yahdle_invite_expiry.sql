@@ -1,10 +1,11 @@
 -- ============================================================
--- Yahdle — Invite expiry (mirrors Snibble's sn_set_match_expiry)
+-- Yahdle — Invite expiry
 --
--- v1 is friend-invite only (invited_user_id always set), so the
--- 7-day branch is what's used today. The 24h branch is reserved
--- for a future "open" mode (invited_user_id null) where any user
--- can join — at that point we want a faster lobby cycle.
+-- Aligned with the SQ standard (Wordy / Rungles):
+--   • invited_user_id null  (open game)    → 7 days
+--   • invited_user_id set   (friend invite) → 1 day
+-- Snibble uses 3 days for friend invites; Yahdle's 12-turn alternation
+-- matches Wordy/Rungles pace so the 1-day window applies.
 -- ============================================================
 
 create or replace function public.yahdle_set_game_expiry()
@@ -12,9 +13,9 @@ returns trigger language plpgsql as $$
 begin
   if new.expires_at is null or tg_op = 'INSERT' then
     if new.invited_user_id is null then
-      new.expires_at := coalesce(new.created_at, now()) + interval '1 day';
-    else
       new.expires_at := coalesce(new.created_at, now()) + interval '7 days';
+    else
+      new.expires_at := coalesce(new.created_at, now()) + interval '1 day';
     end if;
   end if;
   return new;

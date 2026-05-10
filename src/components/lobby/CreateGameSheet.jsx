@@ -94,7 +94,7 @@ export default function CreateGameSheet({ user, onClose, onCreated }) {
           <div className="card p-3 mb-4">
             <div className="text-[10px] uppercase tracking-wide opacity-60 font-bold mb-1">Open game</div>
             <p className="text-sm opacity-80">
-              Drops your game in the lobby for anyone to join. Expires after 24 hours if no one joins.
+              Drops your game in the lobby for anyone to join. Expires after 7 days if no one joins.
             </p>
             <p className="text-[11px] opacity-60 mt-2">
               Limit one open game at a time per player.
