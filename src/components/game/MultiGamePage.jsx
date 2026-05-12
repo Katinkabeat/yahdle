@@ -99,6 +99,10 @@ export default function MultiGamePage({ session, profile, isAdmin }) {
   //     refresh is mid-flight.
   const pendingTurnMutations = useRef(0)
   const turnStateGen = useRef(0)
+  // Serialize turn RPCs so e.g. park-then-unpark can't reach the server
+  // out of order (was causing "Bad builder index" when the unpark hit
+  // Postgres before its preceding park had committed).
+  const turnMutationChain = useRef(Promise.resolve())
   const refresh = useCallback(async () => {
     if (!gameId) return
     try {
@@ -169,10 +173,12 @@ export default function MultiGamePage({ session, profile, isAdmin }) {
   // Wrap every optimistic RPC: bump gen + pending-counter immediately
   // (so concurrent refreshes skip / discard), and after the LAST
   // mutation settles, run one refresh to sync from the server.
-  function trackTurnMutation(promise) {
+  function trackTurnMutation(makePromise) {
     turnStateGen.current += 1
     pendingTurnMutations.current += 1
-    return promise.finally(() => {
+    const p = turnMutationChain.current.then(makePromise, makePromise)
+    turnMutationChain.current = p.catch(() => {})
+    return p.finally(() => {
       pendingTurnMutations.current = Math.max(0, pendingTurnMutations.current - 1)
       if (pendingTurnMutations.current === 0) refresh()
     })
@@ -184,7 +190,7 @@ export default function MultiGamePage({ session, profile, isAdmin }) {
     if (letter == null || inBuilder[i]) return
     if ((myTurnState.builder?.length ?? 0) >= DIE_COUNT) return
     setMyTurnState(s => ({ ...s, builder: [...(s.builder ?? []), { letter, dieIdx: i }] }))
-    trackTurnMutation(parkDie(gameId, i)).catch(err => { toast.error(err.message || 'Failed'); refresh() })
+    trackTurnMutation(() => parkDie(gameId, i)).catch(err => { toast.error(err.message || 'Failed'); refresh() })
   }
 
   function tapBuilderLetter(idx) {
@@ -198,21 +204,21 @@ export default function MultiGamePage({ session, profile, isAdmin }) {
       const tmp = next[a]; next[a] = next[b]; next[b] = tmp
       return { ...s, builder: next }
     })
-    trackTurnMutation(swapLetters(gameId, a, b)).catch(err => { toast.error(err.message || 'Failed'); refresh() })
+    trackTurnMutation(() => swapLetters(gameId, a, b)).catch(err => { toast.error(err.message || 'Failed'); refresh() })
   }
 
   function removeBuilderLetter(idx) {
     if (!isMyTurn) return
     setSwapIdx(null)
     setMyTurnState(s => ({ ...s, builder: (s.builder ?? []).filter((_, i) => i !== idx) }))
-    trackTurnMutation(unparkDie(gameId, idx)).catch(err => { toast.error(err.message || 'Failed'); refresh() })
+    trackTurnMutation(() => unparkDie(gameId, idx)).catch(err => { toast.error(err.message || 'Failed'); refresh() })
   }
 
   function clearBuilder() {
     if (!isMyTurn) return
     setSwapIdx(null)
     setMyTurnState(s => ({ ...s, builder: [] }))
-    trackTurnMutation(clearBuilderRpc(gameId)).catch(err => { toast.error(err.message || 'Failed'); refresh() })
+    trackTurnMutation(() => clearBuilderRpc(gameId)).catch(err => { toast.error(err.message || 'Failed'); refresh() })
   }
 
   // Same validation flow as solo via the shared scoreValidation helper.
