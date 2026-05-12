@@ -14,6 +14,20 @@ Push-your-luck daily word-dice game
 
 ## Session log
 
+### 2026-05-12 — MP blank-tile bug fix (race in client state sync)
+
+Rae and Onyi both hit a bug in MP where rolling produced blank tiles. Onyi's rolls were consumed without faces appearing.
+
+- **Server was fine** — verified live `pg_get_functiondef` for `yahdle_roll_one_die`; the May-9 2D-array fix was deployed and `yahdle_dice_faces()` returns 6×8 cleanly.
+- **Real cause: client-side race** — `handleRoll`, `handleScore`, `confirmZero` in `MultiGamePage.jsx` bypassed `trackTurnMutation`, so they didn't bump `pendingTurnMutations` / `turnStateGen`. Combined with the realtime channel only watching `yahdle_games` + `yahdle_players` (not `yahdle_turn_state`), stale snapshots could overwrite real faces.
+- **Fixes shipped (commit `703df3c`):**
+  - Wrapped roll/score/zero in `trackTurnMutation`.
+  - Added `yahdle_turn_state` realtime subscription on the game channel.
+  - Server-side guard in `yahdle_roll_dice`: raise exception if any face is null after the loop, so the txn rolls back and `rolls_used` doesn't increment on a busted roll. Deployed via Management API.
+  - Client-side guard in `multiplayerActions.rollDice`: throw on empty/all-null array.
+- Verified locally: two consecutive rolls in active MP game returned real letters, counter advanced 0→1→2, no console/server errors.
+- Raeban card [c49] moved to Fledged.
+
 ### 2026-05-09 — Solo daily streak
 
 Mirrored Snibble's streak pattern.
