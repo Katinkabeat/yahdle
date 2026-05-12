@@ -289,6 +289,15 @@ begin
     end if;
   end loop;
 
+  -- Defensive: if any face is null after the loop, abort the txn so the
+  -- player doesn't burn a roll on blank tiles. (Catches future regressions
+  -- in yahdle_roll_one_die / yahdle_dice_faces array indexing.)
+  for i in 1 .. v_n loop
+    if v_faces[i] is null then
+      raise exception 'Roll produced null face at die %', i - 1;
+    end if;
+  end loop;
+
   update public.yahdle_turn_state
   set faces      = v_faces,
       rolls_used = v_state.rolls_used + 1,

@@ -136,6 +136,7 @@ export default function MultiGamePage({ session, profile, isAdmin }) {
     subscriptions: gameId ? [
       { event: 'UPDATE', schema: 'public', table: 'yahdle_games', filter: `id=eq.${gameId}` },
       { event: '*', schema: 'public', table: 'yahdle_players', filter: `game_id=eq.${gameId}` },
+      { event: 'UPDATE', schema: 'public', table: 'yahdle_turn_state', filter: `game_id=eq.${gameId}` },
     ] : [],
     onChange: refresh,
     pollMs: 15_000,
@@ -161,7 +162,7 @@ export default function MultiGamePage({ session, profile, isAdmin }) {
     setAnimating(inBuilder.map(b => !b))
     setTimeout(() => setAnimating(new Array(DIE_COUNT).fill(false)), 500)
     withBusy(async () => {
-      const newFaces = await rollDice(gameId)
+      const newFaces = await trackTurnMutation(() => rollDice(gameId))
       setMyTurnState(s => ({
         ...s,
         faces: normalizeFaces(newFaces),
@@ -234,14 +235,14 @@ export default function MultiGamePage({ session, profile, isAdmin }) {
     if (result.kind === 'reject') { toast.error(result.reason); return }
     if (result.kind === 'ask-zero') { setZeroAskCategory(categoryId); return }
     withBusy(async () => {
-      await scoreCategory(gameId, categoryId, builderWord)
+      await trackTurnMutation(() => scoreCategory(gameId, categoryId, builderWord))
       toast.success(`+${builderScore} • ${cat.name}`)
     })
   }
 
   function confirmZero(categoryId) {
     setZeroAskCategory(null)
-    withBusy(() => takeZero(gameId, categoryId))
+    withBusy(() => trackTurnMutation(() => takeZero(gameId, categoryId)))
   }
 
   function cancelZero() { setZeroAskCategory(null) }

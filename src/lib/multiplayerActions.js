@@ -45,6 +45,9 @@ export async function cancelInvite(gameId) {
 export async function rollDice(gameId) {
   const { data, error } = await supabase.rpc('yahdle_roll_dice', { p_game_id: gameId })
   if (error) throw error
+  if (!Array.isArray(data) || data.length === 0 || data.some(f => f == null)) {
+    throw new Error('Roll returned blank tiles — please try again')
+  }
   return data
 }
 
