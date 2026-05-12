@@ -69,7 +69,7 @@ export default function DiceRack({
           {rollsThisTurn === 0 ? 'Roll' : 'Re-roll'}
         </SQButton>
         <span className="text-xs opacity-70 whitespace-nowrap">
-          Roll {Math.min(rollsThisTurn + 1, ROLLS_PER_TURN)}/{ROLLS_PER_TURN}
+          Roll {rollsThisTurn}/{ROLLS_PER_TURN}
         </span>
       </div>
     </div>
