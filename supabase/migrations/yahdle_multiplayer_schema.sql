@@ -32,7 +32,6 @@ create table if not exists public.yahdle_games (
   winner_user_id      uuid        references auth.users(id),
   forfeit_user_id     uuid        references auth.users(id),
   is_tie              boolean     not null default false,
-  rng_salt            text        not null default encode(gen_random_bytes(8), 'hex'),
   created_at          timestamptz not null default now(),
   joined_at           timestamptz,
   finished_at         timestamptz,
