@@ -65,3 +65,20 @@ Mirrored Snibble's streak pattern.
   - Update other games' theme-flash localStorage fallback to include `yahdle-theme`
   - Build the actual game (lobby cards, board, scoring)
   - `gh repo create` + push
+
+
+### 2026-05-13 — Drop orphan rng_salt column
+
+`yahdle_games.rng_salt` was scaffolded in the initial multiplayer schema with the intent of someday powering a deterministic MP RNG (replay mode, tournament parity, anti-cheat). Never wired — `yahdle_roll_one_die()` uses live `random()`, solo uses date-seeded mulberry32, nothing reads the salt.
+
+Audit before dropping (100% safe):
+- Single grep hit across yahdle/, rae-side-quest/, snibble/, wordy/, rungles/: the column definition itself
+- `pg_depend`: only the column's own default depends on it
+- No functions, views, or triggers reference rng_salt
+- No frontend types/code references it
+
+Migration: `supabase/migrations/yahdle_drop_rng_salt.sql` — `alter table public.yahdle_games drop column if exists rng_salt;`. Baseline `yahdle_multiplayer_schema.sql` updated to match.
+
+If we ever ship deterministic MP RNG, re-add a salt column (or per-turn nonces) when the feature actually lands.
+
+**Commit:** `6827ae2`.
