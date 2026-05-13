@@ -71,16 +71,7 @@ export default function SoloGamePage({ session, profile, isAdmin }) {
   const navigate = useNavigate()
   const userId = session.user.id
 
-  // Admin-only seed salt: wiped on a normal day, but the Reset button sets
-  // a random value so each reset rolls fresh dice for playtesting. Lives
-  // in localStorage so reloads keep the same variant until the next reset.
-  const saltKey = `yahdle:salt:${userId}:${gameId}`
-  const [resetSalt, setResetSalt] = useState(() => {
-    try { return localStorage.getItem(saltKey) || '' } catch { return '' }
-  })
-  const seedBase = resetSalt
-    ? `yahdle:daily:${gameId}:${resetSalt}`
-    : `yahdle:daily:${gameId}`
+  const seedBase = `yahdle:daily:${gameId}`
 
   const [state, setState] = useState(() => loadState(userId, gameId) || makeInitialState())
   const { dict, dictReady } = useDictionary()
@@ -99,8 +90,7 @@ export default function SoloGamePage({ session, profile, isAdmin }) {
   )
 
   // Record the daily completion in Supabase so it counts toward the streak.
-  // Upsert so admin Reset → replay doesn't error; gameId is the Atlantic
-  // YMD passed in via the route param.
+  // gameId is the Atlantic YMD passed in via the route param.
   useEffect(() => {
     if (!isGameOver) return
     let active = true
@@ -247,27 +237,6 @@ export default function SoloGamePage({ session, profile, isAdmin }) {
             <span className="text-sm opacity-80">
               {isGameOver ? `Final: ${totalScore}` : `Turn ${state.turn}/${TOTAL_TURNS} • ${totalScore} pts`}
             </span>
-          }
-          rightSlot={
-            isAdmin ? (
-              <button
-                type="button"
-                onClick={() => {
-                  if (!confirm('Reset with fresh dice? Progress wipes too.')) return
-                  const newSalt = Math.random().toString(36).slice(2, 10)
-                  try {
-                    localStorage.setItem(saltKey, newSalt)
-                    localStorage.removeItem(storageKey(userId, gameId))
-                  } catch {}
-                  setResetSalt(newSalt)
-                  setState(makeInitialState())
-                }}
-                className="text-xs font-bold px-2 py-1 rounded border border-amber-400/60 text-amber-300 hover:bg-amber-400/10"
-                title="Admin-only: wipe save and roll a fresh daily variant"
-              >
-                ↻ Reset
-              </button>
-            ) : null
           }
         />
       }
