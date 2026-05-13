@@ -14,6 +14,10 @@ Push-your-luck daily word-dice game
 
 ## Session log
 
+### 2026-05-13 — Removed admin reset button on solo daily
+
+Daily mode is now open to non-admin players, so the admin-only "↻ Reset" button on `SoloGamePage` had to go — it would have let admins re-roll the daily until they got a leaderboard-topping score. Removed the button JSX, the `resetSalt`/`saltKey` state, and the `:${resetSalt}` suffix on `seedBase`. Seed is now plain `yahdle:daily:${gameId}` for everyone. Existing `yahdle:salt:*` localStorage entries from past resets are harmless and left as-is.
+
 ### 2026-05-12 — Stats page wired (today + my mp stats)
 
 Replaced the placeholder `StatsPage.jsx` with a two-tab page (Today default, My Stats).
