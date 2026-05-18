@@ -6,11 +6,9 @@ import {
 } from '../../../../rae-side-quest/packages/sq-ui'
 import AvatarMenu from '../lobby/AvatarMenu.jsx'
 import HeaderRight from '../HeaderRight.jsx'
+import CloseGamesPanel from './CloseGamesPanel.jsx'
 
-// Admin panel — playtest guide for now. Close-games tooling will land
-// when Yahdle gets a multiplayer mode (the scaffold left an RPC stub
-// at supabase/migrations/yahdle_admin_close_game.sql; not deployed
-// since solo doesn't need it).
+// Admin panel — Close Games + playtest guide.
 export default function AdminPage({ session, profile, isAdmin }) {
   const navigate = useNavigate()
 
@@ -38,6 +36,8 @@ export default function AdminPage({ session, profile, isAdmin }) {
       >
         ← Back to lobby
       </button>
+
+      <CloseGamesPanel />
 
       <section className="card">
         <h2 className="font-display text-xl mb-2">📖 Admin Guide</h2>

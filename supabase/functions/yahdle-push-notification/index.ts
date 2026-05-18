@@ -186,7 +186,7 @@ serve(async (req: Request) => {
       return new Response(JSON.stringify(result), { status: 200, headers: corsHeaders })
     }
 
-    // ── game_finished: yahdle_games UPDATE active→finished ──
+    // ── game_finished: yahdle_games UPDATE (waiting|active)→finished ──
     if (payload.type === 'game_finished') {
       const { record } = payload
       if (!record?.id || !record.created_by || !record.invited_user_id) {
@@ -203,7 +203,12 @@ serve(async (req: Request) => {
         let title = 'Yahdle — game over'
         let body: string
 
-        if (record.forfeit_user_id) {
+        if (record.closed_by_admin) {
+          title = 'Yahdle — game closed'
+          body = record.close_reason
+            ? `An admin closed your game vs ${opponentName}. Reason: ${record.close_reason}`
+            : `An admin closed your game vs ${opponentName}.`
+        } else if (record.forfeit_user_id) {
           if (record.forfeit_user_id === userId) {
             body = `You forfeited your game vs ${opponentName}.`
           } else {

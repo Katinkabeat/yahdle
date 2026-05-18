@@ -99,6 +99,23 @@ export async function rematch(prevGameId) {
   return { gameId: data }
 }
 
+// Admin-only — gated by the shared `public.admins` table's
+// `close_games` permission. The RPC raises if the caller doesn't
+// have it, so the UI can rely on the error for non-admin attempts.
+export async function adminListOpenGames() {
+  const { data, error } = await supabase.rpc('yahdle_admin_list_open_games')
+  if (error) throw error
+  return data ?? []
+}
+
+export async function adminCloseGame(gameId, reason) {
+  const { error } = await supabase.rpc('yahdle_admin_close_game', {
+    p_game_id: gameId,
+    p_reason: reason,
+  })
+  if (error) throw error
+}
+
 // Read-side helpers ────────────────────────────────────────────
 
 // Load the player's own private turn state. Opponent's is hidden by RLS.
