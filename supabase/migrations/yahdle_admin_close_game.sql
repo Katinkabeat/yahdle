@@ -138,15 +138,8 @@ $$;
 
 grant execute on function public.yahdle_admin_list_closed_games(int) to authenticated;
 
--- ── 5. Expand game_finished push trigger to cover waiting→finished ─
--- The original trigger only fired on active→finished. Admin closes
--- can finalize a never-accepted (waiting) game too — without this
--- widening, the players wouldn't get the "closed by admin" ping.
--- The edge function inspects closed_by_admin on the record and
--- branches accordingly.
-drop trigger if exists on_yahdle_game_finished on public.yahdle_games;
-create trigger on_yahdle_game_finished
-after update on public.yahdle_games
-for each row
-when (OLD.status in ('waiting','active') and NEW.status = 'finished')
-execute function public.yahdle_notify_game_finished();
+-- Note: the push trigger on yahdle_games stays at its original
+-- (active→finished) condition. Admin closes are silent — the edge
+-- function also early-returns on closed_by_admin. Per Rae, this
+-- panel is mainly for cleaning up her own stuck test games; no
+-- need to ping anyone.

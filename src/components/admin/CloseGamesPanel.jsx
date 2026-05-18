@@ -73,7 +73,7 @@ export default function CloseGamesPanel() {
       </h2>
       <p className="text-sm text-wordy-600 dark:text-wordy-300 mb-3">
         Close old or stuck games. They'll stop appearing in lobbies and no
-        winner will be attributed. Both players get a push with your reason.
+        winner will be attributed.
       </p>
       {games.length === 0 ? (
         <p className="text-sm text-wordy-500 italic">No open games to close.</p>
