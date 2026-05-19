@@ -252,12 +252,11 @@ function Leaderboard({ rows, userId, myRank, emptyMessage }) {
 }
 
 function LeaderboardRow({ row, rank, isYou }) {
-  const medal = rank === 1 ? '🥇' : rank === 2 ? '🥈' : rank === 3 ? '🥉' : `#${rank}`
   return (
     <li className={`flex items-center gap-3 px-3 py-2 rounded-xl ${
       isYou ? 'bg-white/15 ring-1 ring-white/30' : 'bg-white/5'
     }`}>
-      <div className="w-9 text-center font-display text-sm">{medal}</div>
+      <div className="w-9 text-center font-display text-sm">#{rank}</div>
       <div className="flex-1 min-w-0 truncate text-sm">
         <span className="font-bold">{row.username || 'anon'}</span>
         {isYou && <span className="ml-2 text-[10px] opacity-60">← you</span>}
