@@ -14,6 +14,27 @@ Push-your-luck daily word-dice game
 
 ## Session log
 
+### 2026-05-19 — Extended leaderboards (c92 — first game shipped)
+
+Yahdle is the template for c92 (extended leaderboards across solo SQ games). Snibble and Rungles follow.
+
+- **Renamed `📅 Today` tab → `🏆 Leaderboard`.** Same sub-page, now timeframe-aware.
+- **New segmented control:** Day / Week / Month / All-time. When Day is active, a date stepper (`‹ Tue, May 19 ›`) lets you scroll back through past days — solves the "missed midnight" problem of not seeing yesterday's winner.
+- **New RPCs** replace `yahdle_daily_leaderboard(p_date date)`:
+  - `yahdle_solo_leaderboard(p_timeframe text, p_date date default current_date)` — top 10 per window. Day: single day's score. Week/Month/All: SUM(score) per user in window. Tie-break: completed_at ASC for day, max(completed_at) ASC for aggregates.
+  - `yahdle_solo_my_rank(p_timeframe, p_date)` — caller's rank + score. Client appends a "your rank #N" row when rank > 10.
+- **Old `yahdle_daily_leaderboard` left alive** — purely additive migration so live site never broke during cutover. Drop in a follow-up.
+- **Migrations** (CLI-tracked, timestamp-prefixed — first ones in this repo to use the `<timestamp>_name.sql` convention; older migrations were applied manually via psql):
+  - `20260519130000_yahdle_extended_leaderboards.sql` — new RPCs.
+  - `20260519130100_fix_yahdle_solo_my_rank_ambiguity.sql` — fix CTE column `score` colliding with `RETURNS TABLE (... score int)` OUT param. CTE columns renamed to `uid` / `user_score` / `total_score`.
+- **JSX bug caught in verify step:** `formatIso` rendered UTC-midnight Date with the default formatter, which rolled back a day for Atlantic-time clients. Fixed by adding `timeZone: 'UTC'` to the `DATE_FMT` formatter. Lesson: when rendering pure calendar dates from ISO strings, both construction AND formatting must agree on timezone.
+- **Window definitions** (computed in SQL relative to `p_date` so server stays tz-agnostic): week = `date_trunc('week', p_date)` (Monday-start, ISO), month = `date_trunc('month', p_date)`, all = no bounds.
+- **Past-day visibility:** open to everyone (no play-to-see gate). Matches the locked c92 decision for Snibble too.
+- **Histogram + Quick Stats dropped** from the leaderboard tab. They drew on the full player list (>10) which the new top-10 RPC doesn't return. If Rae misses them, add a separate RPC + section; not done now.
+- **Removed code:** `TodayTab` (replaced by `LeaderboardTab`), `Histogram` component.
+- **Verified locally end-to-end** at `localhost:8080/yahdle/stats` with Rae logged in as test account. All four tabs render real prod data correctly; date stepper time-travels correctly; sum aggregation confirmed (Rae: Day Tue 70 + Day Mon 77 = Week 147).
+- Raeban card [c92] still in flight (Snibble + Rungles pending).
+
 ### 2026-05-13 — Removed admin reset button on solo daily
 
 Daily mode is now open to non-admin players, so the admin-only "↻ Reset" button on `SoloGamePage` had to go — it would have let admins re-roll the daily until they got a leaderboard-topping score. Removed the button JSX, the `resetSalt`/`saltKey` state, and the `:${resetSalt}` suffix on `seedBase`. Seed is now plain `yahdle:daily:${gameId}` for everyone. Existing `yahdle:salt:*` localStorage entries from past resets are harmless and left as-is.
