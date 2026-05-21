@@ -4,6 +4,7 @@ import { BrowserRouter } from 'react-router-dom'
 import { Toaster } from 'react-hot-toast'
 import App from './App.jsx'
 import { ThemeProvider } from './contexts/ThemeContext.jsx'
+import { SQErrorBoundary } from '../../rae-side-quest/packages/sq-ui/index.js'
 import './index.css'
 
 // Register service worker for push notifications + PWA.
@@ -26,11 +27,13 @@ if ('serviceWorker' in navigator) {
 
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
-    <ThemeProvider>
-      <BrowserRouter basename="/yahdle">
-        <App />
-      </BrowserRouter>
-      <Toaster position="top-center" toastOptions={{ duration: 1800 }} />
-    </ThemeProvider>
+    <SQErrorBoundary label="yahdle">
+      <ThemeProvider>
+        <BrowserRouter basename="/yahdle">
+          <App />
+        </BrowserRouter>
+        <Toaster position="top-center" toastOptions={{ duration: 1800 }} />
+      </ThemeProvider>
+    </SQErrorBoundary>
   </React.StrictMode>,
 )
