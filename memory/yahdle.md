@@ -14,6 +14,22 @@ Push-your-luck daily word-dice game
 
 ## Session log
 
+### 2026-05-27 — MP lobby restyled to Wordy chip layout + nudge feature
+
+Rae wanted the multiplayer game list to look like Wordy's and to gain Wordy's "nudge" feature.
+
+- **`MultiplayerCard.jsx`:** active games (was split your-turn / waiting with "vs X · Waiting · score · turn N/12" text rows) now render Wordy-style: player-name chips with the current-turn chip highlighted (`bg-wordy-500 text-white`, others `bg-wordy-200 text-wordy-700`), an `(n/n)` count pill, an "X ago" status line (from `last_activity_at`), and a `▶ Resume` button. your-turn + waiting merged into one `activeGames` list (whose-turn shown via the highlighted chip, like Wordy). Dropped the inline score/turn text for Wordy parity. Removed the now-unused `otherPlayerNames` helper. Chip dark-mode colors come free via shared `sq-ui/globals.css` `.dark .bg-wordy-*` overrides.
+- **Nudge:** 🔔 inside the current player's chip on opponent's-turn games, gated by Wordy's exact logic — active, not my turn, turn idle > 12h, no nudge in last 12h. `displayName()` resolves my own chip name from `profile` (opponents map excludes self), so `profile` is now passed from `LobbyPage`.
+- **Backend (Yahdle has NO direct UPDATE policy on `yahdle_games` — unlike Wordy, which writes `last_nudged_at` from the client):**
+  - `yahdle_nudge.sql` migration: adds `last_nudged_at timestamptz` + SECDEF `yahdle_nudge(p_game_id)` RPC (participant check, not-my-turn, 12h cooldown on `last_activity_at` + `last_nudged_at`, returns the player to notify). Modeled on `yahdle_claim_inactive_win`. `last_activity_at` is a safe turn-start proxy: its touch trigger fires only on `yahdle_players`/`yahdle_turn_state` writes, NOT on a `yahdle_games` nudge write.
+  - `sendNudge()` in `multiplayerActions.js`: calls the RPC, then fire-and-forget POSTs `{type:'nudge'}` to the `yahdle-push-notification` function.
+  - Added `nudge` type to `yahdle-push-notification/index.ts` (mirrors Wordy: looks up current player, `sendIfOptedIn(yahdle, 'nudge')`).
+- **Shipped:** migration run by Rae in the dashboard SQL editor; function deployed (now v6, smoke-tested — bogus game_id returns `game not active`, confirming the branch is live); frontend committed + pushed to `main` (GH Actions auto-deploy).
+- **Gotchas for next time:**
+  - `.env.supabase`'s `SUPABASE_ACCESS_TOKEN` is **expired/dead (401)**. The Supabase CLI has a valid **stored login** — so run CLI commands with `unset SUPABASE_ACCESS_TOKEN` to avoid the dead env token overriding it.
+  - Pooler for psql: `aws-0-us-west-2.pooler.supabase.com`, session port **5432**, user `postgres.yyhewndblruwxsrqzart` (direct `db.<ref>.supabase.co` host no longer resolves).
+  - Couldn't headlessly verify the authed lobby visual (SQ login wall) — confirmed via clean production build + faithful 1:1 port of Wordy's working component. Worth Rae eyeballing the chips live.
+
 ### 2026-05-19 — Extended leaderboards (c92 — first game shipped)
 
 Yahdle is the template for c92 (extended leaderboards across solo SQ games). Snibble and Rungles follow.
