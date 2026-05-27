@@ -422,8 +422,9 @@ export default function MultiGamePage({ session, profile, isAdmin }) {
 
         {/* score pills — one per player in seat order; the current
             player's pill is highlighted (✨). Tap an opponent's pill to
-            see their scorecard. */}
-        {game && !isWaiting && (
+            see their scorecard. Shown to any seated player, including
+            while the game is still filling up. */}
+        {game && iAmPlayer && (
           <div className="flex flex-wrap gap-2 justify-center">
             {[...(myPlayer ? [myPlayer] : []), ...opponents]
               .sort((a, b) => a.player_index - b.player_index)
@@ -445,9 +446,10 @@ export default function MultiGamePage({ session, profile, isAdmin }) {
           </div>
         )}
 
-        {/* Waiting state — invite not yet accepted. Whoever is viewing,
-            show an appropriate prompt instead of an empty board. */}
-        {isWaiting && (
+        {/* Join/accept prompt — only for a viewer who isn't seated yet
+            (open-game joiner, or an invitee mid auto-accept). Seated
+            players see the board below with a "waiting for players" panel. */}
+        {isWaiting && !iAmPlayer && (
           <WaitingCard
             otherName={waitingOtherProfile?.username}
             iAmCreator={iAmCreator}
@@ -474,8 +476,11 @@ export default function MultiGamePage({ session, profile, isAdmin }) {
           />
         )}
 
-        {/* Active game UI */}
-        {!isGameOver && game?.status === 'active' && (
+        {/* Board — shown to a seated player whether the game is still
+            filling (waiting) or active. While waiting, the scorecard is
+            visible (disabled) and a "waiting for players" panel sits where
+            the dice go; it becomes playable the moment the last seat fills. */}
+        {!isGameOver && iAmPlayer && (game?.status === 'active' || isWaiting) && (
           <>
             <Scorecard
               scores={myPlayer?.scores}
@@ -487,7 +492,27 @@ export default function MultiGamePage({ session, profile, isAdmin }) {
               builderWord={builderWord}
             />
 
-            {isMyTurn ? (
+            {isWaiting ? (
+              <div className="card p-4 text-center">
+                <div className="text-2xl mb-1">⏳</div>
+                <div className="text-sm font-semibold">
+                  Waiting for {Math.max(0, maxSeats - seatsFilled)} more player{maxSeats - seatsFilled === 1 ? '' : 's'}
+                </div>
+                <div className="text-[11px] opacity-60 mt-1">
+                  {seatsFilled} of {maxSeats} seats filled — the game starts when everyone's in.
+                </div>
+                {iAmCreator && (
+                  <button
+                    type="button"
+                    onClick={handleCancelInvite}
+                    disabled={inviteBusy}
+                    className="mt-3 text-xs px-3 py-1.5 rounded-full border border-white/15 opacity-70 hover:opacity-100 disabled:opacity-40"
+                  >
+                    Cancel game
+                  </button>
+                )}
+              </div>
+            ) : isMyTurn ? (
               <>
                 <WordBuilder
                   builder={myTurnState.builder ?? []}

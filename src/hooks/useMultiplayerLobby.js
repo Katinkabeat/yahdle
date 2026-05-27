@@ -49,7 +49,11 @@ export function useMultiplayerLobby(userId) {
       const amInvited = g => g.invited_user_id === userId || (g.invited_user_ids ?? []).includes(userId)
       const amPlayer  = g => (g.yahdle_players ?? []).some(p => p.user_id === userId)
       const pending = list.filter(g => g.status === 'waiting' && amInvited(g) && !amPlayer(g))
-      const sent    = list.filter(g => g.status === 'waiting' && g.created_by === userId)
+      // Any waiting game I'm seated in — as the creator OR as a player who
+      // already joined a not-yet-full N-player game. Without amPlayer here, a
+      // joiner's game falls into no bucket and vanishes from their lobby until
+      // it fills (creator still saw it via created_by).
+      const sent    = list.filter(g => g.status === 'waiting' && amPlayer(g))
       const active = list.filter(g => g.status === 'active')
       const finished = list.filter(g => g.status === 'finished').slice(0, 10)
       const openList = open ?? []

@@ -166,30 +166,41 @@ export default function MultiplayerCard({
           })}
 
           {sentInvites.map(g => {
+            const iAmCreator = g.created_by === user?.id
             const names = inviteeNames(g)
             const isOpen = names.length === 0
             const joined = (g.yahdle_players ?? []).length
             const max = g.max_players ?? 2
-            const title = isOpen ? '🎲 Your open game' : `Invited: ${names.join(', ')}`
+            const title = !iAmCreator
+              ? `${nameFor(g.created_by)}'s game`
+              : (isOpen ? '🎲 Your open game' : `Invited: ${names.join(', ')}`)
             const subtitle = isOpen
               ? `⏳ ${joined}/${max} in · waiting for players`
               : `⏳ ${joined}/${max} seats filled · waiting`
             return (
               <div
                 key={g.id}
-                className="flex items-center justify-between rounded-xl px-3 py-2 border bg-wordy-50 border-wordy-100 dark:bg-[#1a1130] dark:border-[#2d1b55]"
+                role="button"
+                tabIndex={0}
+                onClick={() => navigate(`/multi/${g.id}`)}
+                onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); navigate(`/multi/${g.id}`) } }}
+                className="cursor-pointer flex items-center justify-between rounded-xl px-3 py-2 border bg-wordy-50 border-wordy-100 dark:bg-[#1a1130] dark:border-[#2d1b55] hover:border-wordy-300 dark:hover:border-[#4a2d80]"
               >
                 <div className="min-w-0">
                   <div className="text-sm font-semibold truncate">{title}</div>
                   <p className="text-xs text-wordy-400 mt-0.5">{subtitle}</p>
                 </div>
-                <button
-                  onClick={() => handleCancel(g.id)}
-                  className="w-7 h-7 grid place-items-center rounded-full text-wordy-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 shrink-0"
-                  aria-label={isOpen ? 'Cancel open game' : 'Cancel invite'}
-                >
-                  ×
-                </button>
+                {iAmCreator ? (
+                  <button
+                    onClick={(e) => { e.stopPropagation(); handleCancel(g.id) }}
+                    className="w-7 h-7 grid place-items-center rounded-full text-wordy-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 shrink-0"
+                    aria-label={isOpen ? 'Cancel open game' : 'Cancel invite'}
+                  >
+                    ×
+                  </button>
+                ) : (
+                  <span className="opacity-40 text-xl shrink-0" aria-hidden="true">→</span>
+                )}
               </div>
             )
           })}
