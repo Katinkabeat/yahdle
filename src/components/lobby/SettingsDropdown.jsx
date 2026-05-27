@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import {
   SQDropdown,
   SQSettingsRow,
+  SQReportPlayer,
 } from '../../../../rae-side-quest/packages/sq-ui'
 import { useTheme } from '../../contexts/ThemeContext.jsx'
 import { supabase } from '../../lib/supabase.js'
@@ -58,6 +59,7 @@ export default function SettingsDropdown({ isAdmin = false }) {
             onClick={() => { setHowToOpen(true); setOpen(false) }}
           />
           {/* TODO add game-specific settings rows here */}
+          <SQReportPlayer supabase={supabase} game="yahdle" />
           {isAdmin && (
             <SQSettingsRow
               label="🔐 Admin panel"
