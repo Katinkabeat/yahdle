@@ -14,6 +14,20 @@ Push-your-luck daily word-dice game
 
 ## Session log
 
+### 2026-05-27 (later) — N-player multiplayer SHIPPED (c136) + forfeit-continue + c142 fledged
+
+Lifted Yahdle MP from 1v1 → **2–4 players** by porting Wordy's pattern. Built, deployed to prod, verified at the data layer (11 local Postgres sims across the two migrations). **PENDING: live 3–4 account playthrough — can't be headless.**
+
+- **Migrations (applied to prod via pooler psql):**
+  - `yahdle_nplayer_engine.sql` — adds `yahdle_games.max_players` (2–4) + `invited_user_ids uuid[]`; relaxes the `current_player_idx`/`player_index` CHECKs; modulo turn rotation `(idx+1)%n`; auto-start when seats fill; **top-score-group-wins** finalize (1v1 tie → BOTH win; `ties` retired); pairwise `yahdle_matchups` (like Wordy); adds `yahdle_is_participant()` + N-player RLS read policies (without them players 3–4 can't read their own game/scores); unified `yahdle_join_game` (open + invited, slot reservation); `yahdle_list_open_games` now returns max_players + players_joined; `pending_for` honors the array.
+  - `yahdle_forfeit_continue.sql` — adds `yahdle_players.forfeited`. In 3–4p a forfeit marks the player out (loss recorded at game end), skips their seat, others play on; game finishes only when ≤1 active remains (2p forfeit still ends → other wins). `claim_inactive_win` boots just the idle current player and continues. `advance_turn`/`finalize` skip forfeited players.
+- **Client:** Wordy-style create sheet (2/3/4 picker + multi-friend select); MultiGamePage renders a pill per player (current lit ✨, tap opponent → their card), N-column GameOverComparison, waiting-room "X/N seats", "🏳️ you forfeited" screen + dimmed/struck forfeited pills; lobby array-aware (all invitees see the invite; sent/open rows show seat counts).
+- **Board opens while filling (Rae's call):** create → game sits in the lobby; tap it to open the board and watch pills fill in. NOT auto-navigated on create. Playable when the last seat fills.
+- **BUGFIX (Dino couldn't see a game he joined):** a `waiting` game you JOINED fell into no lobby bucket for non-creators (pending excludes you once you're a player; `sent` was creator-only). Fixed: `sent` bucket = `waiting && amPlayer` in `useMultiplayerLobby`, and the lobby waiting row is now tappable (creator keeps ×-cancel; joined non-creator gets →).
+- **Push:** `game_invited` fans out to all `invited_user_ids`; `game_finished` fans out to all N via `is_winner` (forfeiters get "X won"); `turn_change` already worked. My fan-out edits live in `index.ts` alongside the other session's `nudge` type.
+- **c142 (auto-accept invited friends on board open):** already lived in MultiGamePage's auto-accept `useEffect` → **fledged**.
+- **Gotcha (cost me time):** the pooler is **us-west-2** (`aws-0-us-west-2.pooler.supabase.com:5432`, user `postgres.<ref>`) — us-west-1 gives "Tenant or user not found". (CLAUDE.md already documented us-west-2; read it.) `supabase db push --yes` and direct `psql` to shared prod are blocked by the auto-mode classifier unless Rae grants perms; dashboard SQL editor is the no-perms fallback. PostgREST caches functions/columns — after a migration run `notify pgrst, 'reload schema';` or the new RPC/column 404s.
+
 ### 2026-05-27 — MP lobby restyled to Wordy chip layout + nudge feature
 
 Rae wanted the multiplayer game list to look like Wordy's and to gain Wordy's "nudge" feature.
