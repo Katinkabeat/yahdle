@@ -87,8 +87,11 @@ export default function MultiGamePage({ session, profile, isAdmin }) {
   const isGameOver = game?.status === 'finished'
   const isWaiting = game?.status === 'waiting'
   const iAmCreator = !!(game && userId && game.created_by === userId)
-  const iAmInvitee = !!(game && userId && game.invited_user_id === userId)
-  const isOpenGame = !!(game && game.invited_user_id == null)
+  const iAmInvitee = !!(game && userId && (game.invited_user_id === userId || (game.invited_user_ids ?? []).includes(userId)))
+  const iAmPlayer = !!myPlayer
+  const seatsFilled = players.length
+  const maxSeats = game?.max_players ?? 2
+  const hasOpenSeat = seatsFilled < maxSeats
 
   const faces = useMemo(() => normalizeFaces(myTurnState.faces), [myTurnState.faces])
   const inBuilder = useMemo(() => {
@@ -180,7 +183,10 @@ export default function MultiGamePage({ session, profile, isAdmin }) {
   // they're not in yahdle_players yet (see c89). Fire at most once per
   // gameId, only if I'm the invitee and the game is still waiting.
   useEffect(() => {
-    if (!gameId || !isWaiting || !iAmInvitee) return
+    // Only auto-accept for an invitee who isn't already seated. A player
+    // sitting in a not-yet-full game must NOT re-accept (it would error
+    // "Already in this game").
+    if (!gameId || !isWaiting || !iAmInvitee || iAmPlayer) return
     if (autoAcceptAttempted.current === gameId) return
     autoAcceptAttempted.current = gameId
     setInviteBusy(true)
@@ -188,7 +194,7 @@ export default function MultiGamePage({ session, profile, isAdmin }) {
       .then(() => refresh())
       .catch(err => toast.error(err.message || 'Failed to accept invite'))
       .finally(() => setInviteBusy(false))
-  }, [gameId, isWaiting, iAmInvitee, refresh])
+  }, [gameId, isWaiting, iAmInvitee, iAmPlayer, refresh])
 
   useRealtimeChannel({
     channelName: `game-yahdle-${gameId}`,
@@ -446,7 +452,10 @@ export default function MultiGamePage({ session, profile, isAdmin }) {
             otherName={waitingOtherProfile?.username}
             iAmCreator={iAmCreator}
             iAmInvitee={iAmInvitee}
-            isOpenGame={isOpenGame}
+            iAmPlayer={iAmPlayer}
+            seatsFilled={seatsFilled}
+            maxSeats={maxSeats}
+            hasOpenSeat={hasOpenSeat}
             inviteBusy={inviteBusy}
             onCancel={handleCancelInvite}
             onJoinOpen={handleJoinOpen}
@@ -538,14 +547,50 @@ export default function MultiGamePage({ session, profile, isAdmin }) {
 }
 
 function WaitingCard({
-  otherName, iAmCreator, iAmInvitee, isOpenGame,
+  otherName, iAmCreator, iAmInvitee, iAmPlayer, seatsFilled, maxSeats, hasOpenSeat,
   inviteBusy, onCancel, onJoinOpen, onBack,
 }) {
   const display = otherName || 'Someone'
 
-  // Invitee landed via a push notification — auto-accept runs in the
-  // parent useEffect. Just show a transient loading state until the
-  // game flips to 'active' and the normal UI takes over.
+  // Already seated — the game is filling up. Covers the creator and any
+  // player who joined a not-yet-full N-player game.
+  if (iAmPlayer) {
+    const need = Math.max(0, maxSeats - seatsFilled)
+    return (
+      <div className="card p-5 text-center space-y-3">
+        <div className="text-3xl">⏳</div>
+        <div>
+          <div className="font-display text-xl text-wordy-700">
+            Waiting for {need} more player{need === 1 ? '' : 's'}
+          </div>
+          <p className="text-sm opacity-70 mt-1">
+            {seatsFilled} of {maxSeats} seats filled — starts automatically when full.
+          </p>
+        </div>
+        <div className="flex gap-2 justify-center pt-1">
+          <button
+            type="button"
+            onClick={onBack}
+            className="text-sm px-3 py-1.5 rounded-lg border border-wordy-200 text-wordy-600 hover:bg-wordy-50"
+          >
+            ← Lobby
+          </button>
+          {iAmCreator && (
+            <button
+              type="button"
+              onClick={onCancel}
+              disabled={inviteBusy}
+              className="text-sm px-3 py-1.5 rounded-lg text-wordy-500 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 disabled:opacity-50"
+            >
+              Cancel game
+            </button>
+          )}
+        </div>
+      </div>
+    )
+  }
+
+  // Invited but not yet seated — auto-accept runs in the parent effect.
   if (iAmInvitee) {
     return (
       <div className="card p-5 text-center space-y-3">
@@ -558,44 +603,8 @@ function WaitingCard({
     )
   }
 
-  // Creator viewing their own pending invite.
-  if (iAmCreator) {
-    return (
-      <div className="card p-5 text-center space-y-3">
-        <div className="text-3xl">⏳</div>
-        <div>
-          <div className="font-display text-xl text-wordy-700">
-            {isOpenGame ? 'Open game — waiting for a joiner' : `Waiting for ${display}`}
-          </div>
-          <p className="text-sm opacity-70 mt-1">
-            {isOpenGame
-              ? "Anyone can join from their lobby."
-              : "We'll start as soon as they accept."}
-          </p>
-        </div>
-        <div className="flex gap-2 justify-center pt-1">
-          <button
-            type="button"
-            onClick={onBack}
-            className="text-sm px-3 py-1.5 rounded-lg border border-wordy-200 text-wordy-600 hover:bg-wordy-50"
-          >
-            ← Lobby
-          </button>
-          <button
-            type="button"
-            onClick={onCancel}
-            disabled={inviteBusy}
-            className="text-sm px-3 py-1.5 rounded-lg text-wordy-500 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 disabled:opacity-50"
-          >
-            Cancel invite
-          </button>
-        </div>
-      </div>
-    )
-  }
-
-  // Third party landed on an open game URL — offer to join.
-  if (isOpenGame) {
+  // Not invited, but a seat is open — offer to join.
+  if (hasOpenSeat) {
     return (
       <div className="card p-5 text-center space-y-3">
         <div className="text-3xl">🎲</div>
@@ -604,7 +613,7 @@ function WaitingCard({
             {display} has an open game
           </div>
           <p className="text-sm opacity-70 mt-1">
-            Join to take a seat.
+            {seatsFilled} of {maxSeats} seats filled — join to take one.
           </p>
         </div>
         <div className="flex gap-2 justify-center pt-1">
@@ -628,11 +637,9 @@ function WaitingCard({
     )
   }
 
-  // Fallback — friend invite for someone else. Shouldn't be reachable
-  // (RLS blocks SELECT), but render a friendly message in case it does.
   return (
     <div className="card p-4 text-center text-sm opacity-80">
-      This invite isn't for you.
+      This game is full.
     </div>
   )
 }
