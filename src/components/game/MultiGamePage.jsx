@@ -89,6 +89,7 @@ export default function MultiGamePage({ session, profile, isAdmin }) {
   const iAmCreator = !!(game && userId && game.created_by === userId)
   const iAmInvitee = !!(game && userId && (game.invited_user_id === userId || (game.invited_user_ids ?? []).includes(userId)))
   const iAmPlayer = !!myPlayer
+  const iForfeited = !!myPlayer?.forfeited
   const seatsFilled = players.length
   const maxSeats = game?.max_players ?? 2
   const hasOpenSeat = seatsFilled < maxSeats
@@ -313,7 +314,11 @@ export default function MultiGamePage({ session, profile, isAdmin }) {
   function cancelZero() { setZeroAskCategory(null) }
 
   async function handleForfeit() {
-    if (!confirm('Forfeit this game?')) return
+    const others = opponents.filter(o => !o.forfeited).length
+    const msg = others > 1
+      ? "Forfeit? You'll take a loss and the others keep playing."
+      : 'Forfeit this game? You’ll take a loss.'
+    if (!confirm(msg)) return
     withBusy(() => forfeitGame(gameId))
   }
 
@@ -398,7 +403,7 @@ export default function MultiGamePage({ session, profile, isAdmin }) {
             </span>
           }
           rightSlot={
-            !isGameOver && game?.status === 'active' ? (
+            !isGameOver && !iForfeited && game?.status === 'active' ? (
               <button
                 type="button"
                 onClick={handleForfeit}
@@ -439,6 +444,7 @@ export default function MultiGamePage({ session, profile, isAdmin }) {
                     score={p.total_score ?? 0}
                     isCurrent={!isGameOver && game.status === 'active' && p.player_index === game.current_player_idx}
                     isWinner={isGameOver && p.is_winner}
+                    isOut={p.forfeited}
                     onClick={isMe ? undefined : () => setOppSheetId(p.user_id)}
                   />
                 )
@@ -476,11 +482,27 @@ export default function MultiGamePage({ session, profile, isAdmin }) {
           />
         )}
 
-        {/* Board — shown to a seated player whether the game is still
-            filling (waiting) or active. While waiting, the scorecard is
-            visible (disabled) and a "waiting for players" panel sits where
-            the dice go; it becomes playable the moment the last seat fills. */}
-        {!isGameOver && iAmPlayer && (game?.status === 'active' || isWaiting) && (
+        {/* I forfeited but the game's still going for the others. */}
+        {!isGameOver && iForfeited && game?.status === 'active' && (
+          <div className="card p-5 text-center space-y-2">
+            <div className="text-3xl">🏳️</div>
+            <div className="font-display text-xl text-wordy-700">You forfeited</div>
+            <p className="text-sm opacity-70">The game's continuing without you — check back later for the final result.</p>
+            <button
+              type="button"
+              onClick={() => navigate('/')}
+              className="mt-1 text-sm px-3 py-1.5 rounded-lg border border-wordy-200 text-wordy-600 hover:bg-wordy-50"
+            >
+              ← Back to lobby
+            </button>
+          </div>
+        )}
+
+        {/* Board — shown to a seated player (who hasn't forfeited) whether
+            the game is still filling (waiting) or active. While waiting, the
+            scorecard is visible (disabled) and a "waiting for players" panel
+            sits where the dice go; it becomes playable when the last seat fills. */}
+        {!isGameOver && iAmPlayer && !iForfeited && (game?.status === 'active' || isWaiting) && (
           <>
             <Scorecard
               scores={myPlayer?.scores}
@@ -669,20 +691,23 @@ function WaitingCard({
   )
 }
 
-function PlayerPill({ name, score, isCurrent, isWinner, onClick }) {
+function PlayerPill({ name, score, isCurrent, isWinner, isOut, onClick }) {
   const base = 'inline-flex items-center gap-1.5 rounded-full px-3 py-0.5 text-xs font-bold transition-all'
-  const cls = isWinner
-    ? 'bg-yellow-50 border-2 border-yellow-400 text-yellow-800'
-    : isCurrent
-      ? 'bg-wordy-200 border-2 border-wordy-500 text-wordy-800'
-      : 'bg-wordy-50 border border-wordy-200 text-wordy-500'
+  const cls = isOut
+    ? 'bg-white/5 border border-white/10 text-wordy-400/60 line-through'
+    : isWinner
+      ? 'bg-yellow-50 border-2 border-yellow-400 text-yellow-800'
+      : isCurrent
+        ? 'bg-wordy-200 border-2 border-wordy-500 text-wordy-800'
+        : 'bg-wordy-50 border border-wordy-200 text-wordy-500'
   const Tag = onClick ? 'button' : 'span'
   return (
     <Tag onClick={onClick} className={`${base} ${cls}`}>
-      {isWinner && <span>🏆</span>}
-      {!isWinner && isCurrent && <span>✨</span>}
+      {isOut && <span className="no-underline">🏳️</span>}
+      {!isOut && isWinner && <span>🏆</span>}
+      {!isOut && !isWinner && isCurrent && <span>✨</span>}
       <span>{name}</span>
-      <span className="font-display text-sm text-wordy-800">{score}</span>
+      <span className={`font-display text-sm ${isOut ? '' : 'text-wordy-800'}`}>{score}</span>
     </Tag>
   )
 }
