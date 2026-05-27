@@ -12,6 +12,9 @@
 //   4. game_finished    — yahdle_games AFTER UPDATE, status active→finished.
 //                         Notifies both players with tailored body
 //                         (won / lost / tie / opponent forfeited).
+//   5. nudge            — client POST (after yahdle_nudge RPC stamps the
+//                         12h cooldown). Reminds the current player it's
+//                         their turn.
 //
 // Reuses the unified push_subscriptions table. Subscription fallback
 // order: ['sidequest', 'yahdle'] — most users opt in via the SQ hub.
@@ -251,6 +254,38 @@ serve(async (req: Request) => {
         results.push({ user_id: userId, ...r })
       }
       return new Response(JSON.stringify({ results }), { status: 200, headers: corsHeaders })
+    }
+
+    // ── nudge: client POST, remind the current player it's their turn ──
+    // The yahdle_nudge RPC has already validated eligibility + stamped the
+    // cooldown; we just look up who to ping and send.
+    if (payload.type === 'nudge') {
+      const { game_id, nudger_name } = payload
+      const { data: game } = await supabase
+        .from('yahdle_games')
+        .select('current_player_idx, status')
+        .eq('id', game_id)
+        .single()
+      if (!game || game.status !== 'active') {
+        return new Response(JSON.stringify({ skipped: 'game not active' }), { status: 200, headers: corsHeaders })
+      }
+      const { data: currentPlayer } = await supabase
+        .from('yahdle_players')
+        .select('user_id')
+        .eq('game_id', game_id)
+        .eq('player_index', game.current_player_idx)
+        .single()
+      if (!currentPlayer) {
+        return new Response(JSON.stringify({ skipped: 'player not found' }), { status: 200, headers: corsHeaders })
+      }
+      const result = await sendIfOptedIn(supabase, currentPlayer.user_id, 'yahdle', 'nudge', {
+        title: 'Yahdle — your turn!',
+        body: `${nudger_name || 'Someone'} is waiting for your move! 🔔`,
+        tag: `yahdle-nudge-${game_id}`,
+        url: gameUrl(game_id),
+        icon: ICON,
+      })
+      return new Response(JSON.stringify(result), { status: 200, headers: corsHeaders })
     }
 
     return new Response(JSON.stringify({ skipped: 'unknown type' }), { status: 200, headers: corsHeaders })

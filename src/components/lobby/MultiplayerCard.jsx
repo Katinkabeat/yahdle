@@ -1,14 +1,17 @@
-import { useState } from 'react'
+import { Fragment, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import toast from 'react-hot-toast'
-import { acceptInvite, declineInvite, cancelInvite, joinOpenGame } from '../../lib/multiplayerActions.js'
+import { acceptInvite, declineInvite, cancelInvite, joinOpenGame, sendNudge } from '../../lib/multiplayerActions.js'
 import CreateGameSheet from './CreateGameSheet.jsx'
 
-// Yahdle MP lobby card. Pending invites first, your-turn second, waiting
-// third, joinable open games last. Lobby data is fetched once in
-// LobbyPage via useMultiplayerLobby and passed in.
+const NUDGE_COOLDOWN_MS = 12 * 60 * 60 * 1000 // 12 hours
+
+// Yahdle MP lobby card. Pending invites first, sent invites second, active
+// games (Wordy-style player chips) third, joinable open games last. Lobby
+// data is fetched once in LobbyPage via useMultiplayerLobby and passed in.
 export default function MultiplayerCard({
   user,
+  profile,
   pendingInvites = [],
   sentInvites = [],
   activeGames = [],
@@ -18,13 +21,51 @@ export default function MultiplayerCard({
 }) {
   const navigate = useNavigate()
   const [sheetOpen, setSheetOpen] = useState(false)
+  const [nudgingId, setNudgingId] = useState(null)
+  const [nudgedIds, setNudgedIds] = useState(() => new Set())
 
   const nameFor = (id) => opponents[id]?.username ?? 'Someone'
-  function otherPlayerNames(game) {
-    return (game.yahdle_players ?? [])
-      .filter(p => p.user_id !== user?.id)
-      .sort((a, b) => a.player_index - b.player_index)
-      .map(p => nameFor(p.user_id))
+  // My own name isn't in the opponents map — resolve it from profile.
+  const displayName = (id) => (id === user?.id ? (profile?.username ?? 'You') : nameFor(id))
+
+  // "X ago" since the current turn started (last_activity_at). Matches Wordy.
+  function timeAgo(ts) {
+    if (!ts) return null
+    const diff  = Date.now() - new Date(ts).getTime()
+    const mins  = Math.floor(diff / 60000)
+    const hours = Math.floor(diff / 3600000)
+    const days  = Math.floor(diff / 86400000)
+    if (days  > 0) return `${days}d ago`
+    if (hours > 0) return `${hours}h ago`
+    if (mins  > 0) return `${mins}m ago`
+    return 'just now'
+  }
+
+  // Nudge eligibility: active game, not my turn, current turn idle > 12h,
+  // and no nudge in the last 12h (or already nudged this session).
+  function canNudge(g) {
+    const me = g.yahdle_players?.find(p => p.user_id === user?.id)
+    if (!me || g.status !== 'active') return false
+    if (me.player_index === g.current_player_idx) return false
+    const now = Date.now()
+    const turnAge  = g.last_activity_at ? now - new Date(g.last_activity_at).getTime() : 0
+    const nudgeAge = g.last_nudged_at   ? now - new Date(g.last_nudged_at).getTime()   : Infinity
+    return turnAge > NUDGE_COOLDOWN_MS && nudgeAge > NUDGE_COOLDOWN_MS && !nudgedIds.has(g.id)
+  }
+
+  async function handleNudge(e, g) {
+    e.stopPropagation()
+    if (nudgingId) return
+    setNudgingId(g.id)
+    try {
+      await sendNudge(g.id, profile?.username)
+      setNudgedIds(prev => new Set(prev).add(g.id))
+      toast.success('🔔 Reminder sent!')
+    } catch (err) {
+      toast.error(err.message || 'Failed to send reminder')
+    } finally {
+      setNudgingId(null)
+    }
   }
   function inviteeNames(game) {
     const ids = (game.invited_user_ids ?? [])
@@ -70,16 +111,6 @@ export default function MultiplayerCard({
     }
   }
 
-  // Split active games into your-turn / waiting-on-opponent.
-  const yourTurn = []
-  const waiting = []
-  for (const g of activeGames) {
-    const myPlayer = g.yahdle_players?.find(p => p.user_id === user?.id)
-    if (!myPlayer) continue
-    if (myPlayer.player_index === g.current_player_idx) yourTurn.push(g)
-    else waiting.push(g)
-  }
-
   return (
     <>
       <section className="card">
@@ -97,7 +128,7 @@ export default function MultiplayerCard({
 
         {loading && <p className="text-sm opacity-60 text-center py-2">Loading…</p>}
 
-        {(pendingInvites.length === 0 && sentInvites.length === 0 && yourTurn.length === 0 && waiting.length === 0 && openGames.length === 0 && !loading) && (
+        {(pendingInvites.length === 0 && sentInvites.length === 0 && activeGames.length === 0 && openGames.length === 0 && !loading) && (
           <p className="text-sm text-wordy-400 text-center py-2">
             No active games — start an open game or invite a friend.
           </p>
@@ -163,26 +194,60 @@ export default function MultiplayerCard({
             )
           })}
 
-          {yourTurn.map(g => {
-            const others = otherPlayerNames(g)
-            const myPlayer = g.yahdle_players.find(p => p.user_id === user?.id)
+          {activeGames.map(g => {
+            const players = (g.yahdle_players ?? []).slice().sort((a, b) => a.player_index - b.player_index)
+            const max = g.max_players ?? players.length
+            const nudgeable = canNudge(g)
             return (
-              <button
+              <div
                 key={g.id}
-                type="button"
-                onClick={() => navigate(`/multi/${g.id}`)}
-                className="w-full text-left flex items-center justify-between rounded-xl px-3 py-2 border bg-wordy-50 border-wordy-100 dark:bg-[#1a1130] dark:border-[#2d1b55] hover:border-wordy-300 dark:hover:border-[#4a2d80]"
+                className="flex items-center justify-between rounded-xl px-3 py-2 border bg-wordy-50 border-wordy-100 dark:bg-[#1a1130] dark:border-[#2d1b55]"
               >
                 <div className="min-w-0">
-                  <div className="text-sm font-semibold truncate">vs {others.join(', ') || 'opponent'}</div>
-                  <p className="text-xs text-wordy-400 mt-0.5">
-                    🎯 Your turn · your {myPlayer?.total_score ?? 0} · turn {g.current_turn}/12
-                  </p>
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    {players.map((p, i) => {
+                      const isCurrentTurn = p.player_index === g.current_player_idx
+                      const showNudge = isCurrentTurn && nudgeable
+                      // 4-player games: break after chip 2 so chips wrap 2-per-row.
+                      const breakAfter = players.length === 4 && i === 1
+                      return (
+                        <Fragment key={p.user_id}>
+                          <span
+                            className={`text-xs font-bold px-2 py-0.5 rounded-full inline-flex items-center gap-1 ${
+                              isCurrentTurn
+                                ? 'text-white bg-wordy-500'
+                                : 'text-wordy-700 bg-wordy-200'
+                            }`}
+                          >
+                            {showNudge && (
+                              <button
+                                onClick={(e) => handleNudge(e, g)}
+                                disabled={nudgingId === g.id}
+                                className="hover:scale-110 transition-transform leading-none"
+                                title="Send a reminder"
+                              >
+                                {nudgingId === g.id ? '⏳' : '🔔'}
+                              </button>
+                            )}
+                            {displayName(p.user_id)}
+                          </span>
+                          {breakAfter && <div className="basis-full h-0" aria-hidden="true" />}
+                        </Fragment>
+                      )
+                    })}
+                    <span className="text-xs text-wordy-400">
+                      ({players.length}/{max})
+                    </span>
+                  </div>
+                  <p className="text-xs text-wordy-400 mt-0.5">{timeAgo(g.last_activity_at) ?? '🟢 In progress'}</p>
                 </div>
-                <span className="text-xs px-3 py-1.5 rounded-lg font-bold btn-primary bg-amber-500 hover:bg-amber-600 shrink-0">
-                  Play
-                </span>
-              </button>
+                <button
+                  onClick={() => navigate(`/multi/${g.id}`)}
+                  className="text-xs px-3 py-1.5 rounded-lg font-bold btn-primary shrink-0 min-w-[5rem]"
+                >
+                  ▶ Resume
+                </button>
+              </div>
             )
           })}
 
@@ -214,26 +279,6 @@ export default function MultiplayerCard({
             </div>
           ))}
 
-          {waiting.map(g => {
-            const others = otherPlayerNames(g)
-            const myPlayer = g.yahdle_players.find(p => p.user_id === user?.id)
-            return (
-              <button
-                key={g.id}
-                type="button"
-                onClick={() => navigate(`/multi/${g.id}`)}
-                className="w-full text-left flex items-center justify-between rounded-xl px-3 py-2 border bg-wordy-50 border-wordy-100 dark:bg-[#1a1130] dark:border-[#2d1b55] hover:border-wordy-300 dark:hover:border-[#4a2d80]"
-              >
-                <div className="min-w-0">
-                  <div className="text-sm font-semibold truncate">vs {others.join(', ') || 'opponent'}</div>
-                  <p className="text-xs text-wordy-400 mt-0.5">
-                    ⏳ Waiting · your {myPlayer?.total_score ?? 0} · turn {g.current_turn}/12
-                  </p>
-                </div>
-                <span className="opacity-40 text-xl">→</span>
-              </button>
-            )
-          })}
         </div>
       </section>
 

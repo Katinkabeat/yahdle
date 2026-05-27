@@ -52,6 +52,7 @@ export default function LobbyPage({ session, profile, isAdmin }) {
       <SoloPlayCard session={session} />
       <MultiplayerCard
         user={user}
+        profile={profile}
         pendingInvites={pendingInvites}
         sentInvites={sentInvites}
         activeGames={activeGames}

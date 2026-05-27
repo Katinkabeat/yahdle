@@ -100,6 +100,23 @@ export async function claimInactiveWin(gameId) {
   if (error) throw error
 }
 
+// Nudge the current player that it's their turn. The RPC validates the
+// caller is a waiting participant + enforces the 12h cooldown server-side;
+// the push to the current player is fire-and-forget so the UI stays snappy.
+export async function sendNudge(gameId, nudgerName) {
+  const { error } = await supabase.rpc('yahdle_nudge', { p_game_id: gameId })
+  if (error) throw error
+  fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/yahdle-push-notification`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
+      'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY,
+    },
+    body: JSON.stringify({ type: 'nudge', game_id: gameId, nudger_name: nudgerName }),
+  }).catch(() => {})
+}
+
 export async function rematch(prevGameId) {
   const { data, error } = await supabase.rpc('yahdle_rematch', { p_game_id: prevGameId })
   if (error) throw error
