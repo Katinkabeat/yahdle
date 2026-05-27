@@ -61,6 +61,8 @@ export function useMultiplayerLobby(userId) {
       for (const g of list) {
         if (g.created_by && g.created_by !== userId) otherIds.add(g.created_by)
         if (g.invited_user_id && g.invited_user_id !== userId) otherIds.add(g.invited_user_id)
+        for (const iid of g.invited_user_ids ?? []) if (iid && iid !== userId) otherIds.add(iid)
+        for (const p of g.yahdle_players ?? []) if (p.user_id && p.user_id !== userId) otherIds.add(p.user_id)
       }
 
       let oppMap = {}

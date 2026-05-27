@@ -19,9 +19,17 @@ export default function MultiplayerCard({
   const navigate = useNavigate()
   const [sheetOpen, setSheetOpen] = useState(false)
 
-  function opponentOf(game) {
-    const oppId = game.created_by === user?.id ? game.invited_user_id : game.created_by
-    return opponents[oppId]
+  const nameFor = (id) => opponents[id]?.username ?? 'Someone'
+  function otherPlayerNames(game) {
+    return (game.yahdle_players ?? [])
+      .filter(p => p.user_id !== user?.id)
+      .sort((a, b) => a.player_index - b.player_index)
+      .map(p => nameFor(p.user_id))
+  }
+  function inviteeNames(game) {
+    const ids = (game.invited_user_ids ?? [])
+    const list = ids.length ? ids : (game.invited_user_id ? [game.invited_user_id] : [])
+    return list.map(nameFor)
   }
 
   async function handleAccept(gameId) {
@@ -97,15 +105,15 @@ export default function MultiplayerCard({
 
         <div className="space-y-2">
           {pendingInvites.map(g => {
-            const opp = opponentOf(g)
+            const max = g.max_players ?? 2
             return (
               <div
                 key={g.id}
                 className="flex items-center justify-between rounded-xl px-3 py-2 border bg-wordy-50 border-wordy-100 dark:bg-[#1a1130] dark:border-[#2d1b55]"
               >
                 <div className="min-w-0">
-                  <div className="text-sm font-semibold truncate">{opp?.username ?? 'Someone'}</div>
-                  <p className="text-xs text-wordy-400 mt-0.5">📨 invited you to a game</p>
+                  <div className="text-sm font-semibold truncate">{nameFor(g.created_by)}</div>
+                  <p className="text-xs text-wordy-400 mt-0.5">📨 invited you{max > 2 ? ` to a ${max}-player game` : ' to a game'}</p>
                 </div>
                 <div className="flex gap-1.5 shrink-0">
                   <button
@@ -127,12 +135,14 @@ export default function MultiplayerCard({
           })}
 
           {sentInvites.map(g => {
-            const isOpen = !g.invited_user_id
-            const opp = isOpen ? null : opponents[g.invited_user_id]
-            const title = isOpen ? '🎲 Your open game' : (opp?.username ?? 'Opponent')
+            const names = inviteeNames(g)
+            const isOpen = names.length === 0
+            const joined = (g.yahdle_players ?? []).length
+            const max = g.max_players ?? 2
+            const title = isOpen ? '🎲 Your open game' : `Invited: ${names.join(', ')}`
             const subtitle = isOpen
-              ? '⏳ Waiting for someone to join'
-              : '⏳ Waiting for them to accept'
+              ? `⏳ ${joined}/${max} in · waiting for players`
+              : `⏳ ${joined}/${max} seats filled · waiting`
             return (
               <div
                 key={g.id}
@@ -154,9 +164,8 @@ export default function MultiplayerCard({
           })}
 
           {yourTurn.map(g => {
-            const opp = opponentOf(g)
+            const others = otherPlayerNames(g)
             const myPlayer = g.yahdle_players.find(p => p.user_id === user?.id)
-            const oppPlayer = g.yahdle_players.find(p => p.user_id !== user?.id)
             return (
               <button
                 key={g.id}
@@ -165,9 +174,9 @@ export default function MultiplayerCard({
                 className="w-full text-left flex items-center justify-between rounded-xl px-3 py-2 border bg-wordy-50 border-wordy-100 dark:bg-[#1a1130] dark:border-[#2d1b55] hover:border-wordy-300 dark:hover:border-[#4a2d80]"
               >
                 <div className="min-w-0">
-                  <div className="text-sm font-semibold truncate">vs {opp?.username ?? 'opponent'}</div>
+                  <div className="text-sm font-semibold truncate">vs {others.join(', ') || 'opponent'}</div>
                   <p className="text-xs text-wordy-400 mt-0.5">
-                    🎯 Your turn · {myPlayer?.total_score ?? 0} – {oppPlayer?.total_score ?? 0} · turn {g.current_turn}/12
+                    🎯 Your turn · your {myPlayer?.total_score ?? 0} · turn {g.current_turn}/12
                   </p>
                 </div>
                 <span className="text-xs px-3 py-1.5 rounded-lg font-bold btn-primary bg-amber-500 hover:bg-amber-600 shrink-0">
@@ -193,7 +202,7 @@ export default function MultiplayerCard({
                   <div className="text-sm font-semibold truncate">
                     {g.creator_username ?? 'Someone'}
                   </div>
-                  <p className="text-xs text-wordy-400 mt-0.5">🎲 Open game · waiting</p>
+                  <p className="text-xs text-wordy-400 mt-0.5">🎲 Open game · {g.players_joined ?? 1}/{g.max_players ?? 2} joined</p>
                 </div>
               </div>
               <button
@@ -206,9 +215,8 @@ export default function MultiplayerCard({
           ))}
 
           {waiting.map(g => {
-            const opp = opponentOf(g)
+            const others = otherPlayerNames(g)
             const myPlayer = g.yahdle_players.find(p => p.user_id === user?.id)
-            const oppPlayer = g.yahdle_players.find(p => p.user_id !== user?.id)
             return (
               <button
                 key={g.id}
@@ -217,9 +225,9 @@ export default function MultiplayerCard({
                 className="w-full text-left flex items-center justify-between rounded-xl px-3 py-2 border bg-wordy-50 border-wordy-100 dark:bg-[#1a1130] dark:border-[#2d1b55] hover:border-wordy-300 dark:hover:border-[#4a2d80]"
               >
                 <div className="min-w-0">
-                  <div className="text-sm font-semibold truncate">vs {opp?.username ?? 'opponent'}</div>
+                  <div className="text-sm font-semibold truncate">vs {others.join(', ') || 'opponent'}</div>
                   <p className="text-xs text-wordy-400 mt-0.5">
-                    ⏳ Waiting on them · {myPlayer?.total_score ?? 0} – {oppPlayer?.total_score ?? 0} · turn {g.current_turn}/12
+                    ⏳ Waiting · your {myPlayer?.total_score ?? 0} · turn {g.current_turn}/12
                   </p>
                 </div>
                 <span className="opacity-40 text-xl">→</span>
