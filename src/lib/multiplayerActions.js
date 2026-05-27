@@ -3,11 +3,13 @@ import { supabase } from './supabase.js'
 // Thin wrappers around the Yahdle multiplayer RPCs. All game state
 // mutations go server-side (SECDEF) — this file just relays.
 
-// invitedUserId may be null to create an OPEN game any user can join.
-// Server caps one open game per creator at a time.
-export async function createGame(invitedUserId) {
+// Create a multiplayer game. invitedUserIds empty => an OPEN game any
+// user can join (server caps one open game per creator). maxPlayers is
+// 2–4; reserved invitee seats + open seats fill to that count.
+export async function createGame({ invitedUserIds = [], maxPlayers = 2 } = {}) {
   const { data, error } = await supabase.rpc('yahdle_create_game', {
-    p_invited_user_id: invitedUserId ?? null,
+    p_invited_user_ids: invitedUserIds.length ? invitedUserIds : null,
+    p_max_players: maxPlayers,
   })
   if (error) throw error
   return { gameId: data }
@@ -18,9 +20,14 @@ export async function acceptInvite(gameId) {
   if (error) throw error
 }
 
-// Join someone else's open game. Server flips status→active and sets
-// invited_user_id = the joiner so the rest of the schema (RLS, push
-// triggers, pending_for) keeps working unchanged.
+// Join any waiting game with a free seat (open or one you're invited to).
+// Server assigns the next player_index and auto-starts when full.
+export async function joinGame(gameId) {
+  const { error } = await supabase.rpc('yahdle_join_game', { p_game_id: gameId })
+  if (error) throw error
+}
+
+// Back-compat alias — the join path is now unified server-side.
 export async function joinOpenGame(gameId) {
   const { error } = await supabase.rpc('yahdle_join_open_game', { p_game_id: gameId })
   if (error) throw error

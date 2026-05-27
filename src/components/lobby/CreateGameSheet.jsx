@@ -3,18 +3,22 @@ import toast from 'react-hot-toast'
 import { useFriends } from '../../hooks/useFriends.js'
 import { createGame } from '../../lib/multiplayerActions.js'
 
-// Yahdle MP CreateGameSheet — two modes:
-//   • Open game (default): create a game any user can join from the
-//     lobby. Server caps one open game per creator at a time.
-//   • Friend invite: pick a specific friend; server expires invite
-//     after 7 days.
+// Yahdle MP CreateGameSheet — mirrors Wordy's New Game sheet:
+//   • Player count picker (2–4).
+//   • Open game: drops in the lobby for anyone to join.
+//   • With friends: reserve seats for picked friends (up to count-1);
+//     any remaining seats fill from the open lobby.
 export default function CreateGameSheet({ user, onClose, onCreated }) {
   const [open, setOpen] = useState(false)
   const [mode, setMode] = useState('open') // 'open' | 'friend'
+  const [maxPlayers, setMaxPlayers] = useState(2)
   const [submitting, setSubmitting] = useState(false)
   const [search, setSearch] = useState('')
-  const [selectedId, setSelectedId] = useState(null)
+  const [selectedIds, setSelectedIds] = useState(() => new Set())
   const { friends, loading: friendsLoading } = useFriends(user?.id)
+
+  const inviteLimit = maxPlayers - 1
+  const openSeats = Math.max(0, maxPlayers - 1 - selectedIds.size)
 
   useEffect(() => {
     const id = requestAnimationFrame(() => setOpen(true))
@@ -27,22 +31,50 @@ export default function CreateGameSheet({ user, onClose, onCreated }) {
     return () => window.removeEventListener('keydown', onKey)
   }, [onClose])
 
+  // Lowering the player count can't leave more invitees than seats.
+  useEffect(() => {
+    setSelectedIds(prev => {
+      if (prev.size <= maxPlayers - 1) return prev
+      const next = new Set()
+      for (const id of prev) {
+        if (next.size >= maxPlayers - 1) break
+        next.add(id)
+      }
+      return next
+    })
+  }, [maxPlayers])
+
   const filteredFriends = useMemo(() => {
     const q = search.trim().toLowerCase()
     if (!q) return friends
     return friends.filter(f => f.username?.toLowerCase().includes(q))
   }, [friends, search])
 
+  function toggleFriend(id) {
+    setSelectedIds(prev => {
+      const next = new Set(prev)
+      if (next.has(id)) {
+        next.delete(id)
+      } else {
+        if (next.size >= inviteLimit) {
+          toast(`Up to ${inviteLimit} friend${inviteLimit > 1 ? 's' : ''} for a ${maxPlayers}-player game.`)
+          return prev
+        }
+        next.add(id)
+      }
+      return next
+    })
+  }
+
   async function handleCreate() {
     if (submitting) return
-    if (mode === 'friend' && !selectedId) return
+    if (mode === 'friend' && selectedIds.size === 0) return
     setSubmitting(true)
     try {
-      const opponentId = mode === 'friend' ? selectedId : null
-      const { gameId } = await createGame(opponentId)
+      const invitedUserIds = mode === 'friend' ? [...selectedIds] : []
+      const { gameId } = await createGame({ invitedUserIds, maxPlayers })
       if (mode === 'friend') {
-        const opp = friends.find(f => f.id === selectedId)
-        toast.success(opp ? `Invite sent to ${opp.username}.` : 'Invite sent.')
+        toast.success(invitedUserIds.length === 1 ? 'Invite sent.' : `Invites sent to ${invitedUserIds.length} friends.`)
       } else {
         toast.success('Open game created — anyone can join.')
       }
@@ -73,20 +105,28 @@ export default function CreateGameSheet({ user, onClose, onCreated }) {
           <button onClick={onClose} className="text-white/60 hover:text-white text-xl leading-none">×</button>
         </div>
 
+        {/* Player count */}
+        <div className="text-[10px] uppercase tracking-wide opacity-60 font-bold mb-1">Players</div>
         <div className="flex gap-1 p-1 mb-3 rounded-xl bg-black/30 border border-white/10">
-          <button
-            type="button"
-            onClick={() => setMode('open')}
-            className={`${tabBase} ${mode === 'open' ? tabOn : tabOff}`}
-          >
+          {[2, 3, 4].map(n => (
+            <button
+              key={n}
+              type="button"
+              onClick={() => setMaxPlayers(n)}
+              className={`${tabBase} ${maxPlayers === n ? tabOn : tabOff}`}
+            >
+              {n}
+            </button>
+          ))}
+        </div>
+
+        {/* Mode */}
+        <div className="flex gap-1 p-1 mb-3 rounded-xl bg-black/30 border border-white/10">
+          <button type="button" onClick={() => setMode('open')} className={`${tabBase} ${mode === 'open' ? tabOn : tabOff}`}>
             🎲 Open game
           </button>
-          <button
-            type="button"
-            onClick={() => setMode('friend')}
-            className={`${tabBase} ${mode === 'friend' ? tabOn : tabOff}`}
-          >
-            👥 Friend
+          <button type="button" onClick={() => setMode('friend')} className={`${tabBase} ${mode === 'friend' ? tabOn : tabOff}`}>
+            👥 With friends
           </button>
         </div>
 
@@ -94,16 +134,23 @@ export default function CreateGameSheet({ user, onClose, onCreated }) {
           <div className="card p-3 mb-4">
             <div className="text-[10px] uppercase tracking-wide opacity-60 font-bold mb-1">Open game</div>
             <p className="text-sm opacity-80">
-              Drops your game in the lobby for anyone to join. Expires after 7 days if no one joins.
+              Drops your {maxPlayers}-player game in the lobby for anyone to join. Starts once {maxPlayers} players are in. Expires after 7 days if it doesn't fill.
             </p>
-            <p className="text-[11px] opacity-60 mt-2">
-              Limit one open game at a time per player.
-            </p>
+            <p className="text-[11px] opacity-60 mt-2">Limit one open game at a time per player.</p>
           </div>
         ) : (
           <>
             <div className="card p-3 mb-3">
-              <div className="text-[10px] uppercase tracking-wide opacity-60 font-bold mb-1">Invite a friend</div>
+              <div className="text-[10px] uppercase tracking-wide opacity-60 font-bold mb-1">
+                Invite friends — pick up to {inviteLimit}
+              </div>
+              <p className="text-[11px] opacity-60 mb-2">
+                {selectedIds.size > 0 && openSeats > 0
+                  ? `${selectedIds.size} invited · ${openSeats} open seat${openSeats > 1 ? 's' : ''} fill from the lobby.`
+                  : openSeats > 0
+                    ? `Their seats are reserved; ${openSeats} remaining seat${openSeats > 1 ? 's' : ''} fill from the open lobby.`
+                    : 'All seats reserved for the friends you pick.'}
+              </p>
               <input
                 value={search}
                 onChange={e => setSearch(e.target.value)}
@@ -123,12 +170,12 @@ export default function CreateGameSheet({ user, onClose, onCreated }) {
                 <div className="text-sm opacity-60 text-center py-4">No friends match "{search}".</div>
               )}
               {filteredFriends.map(f => {
-                const sel = selectedId === f.id
+                const sel = selectedIds.has(f.id)
                 return (
                   <button
                     key={f.id}
                     type="button"
-                    onClick={() => setSelectedId(f.id)}
+                    onClick={() => toggleFriend(f.id)}
                     className={`w-full text-left card p-3 flex items-center justify-between transition ${sel ? 'border-wordy-500 bg-wordy-700/20' : 'hover:border-white/20'}`}
                   >
                     <div className="flex items-center gap-2">
@@ -151,12 +198,14 @@ export default function CreateGameSheet({ user, onClose, onCreated }) {
         <button
           type="button"
           onClick={handleCreate}
-          disabled={submitting || (mode === 'friend' && !selectedId)}
+          disabled={submitting || (mode === 'friend' && selectedIds.size === 0)}
           className="w-full btn-primary disabled:opacity-50"
         >
           {submitting
             ? (mode === 'open' ? 'Creating…' : 'Sending…')
-            : (mode === 'open' ? 'Create open game' : 'Send invite')}
+            : (mode === 'open'
+                ? `Create open game (${maxPlayers}p)`
+                : `Send ${selectedIds.size || ''} invite${selectedIds.size === 1 ? '' : 's'}`.replace('  ', ' '))}
         </button>
       </div>
     </div>

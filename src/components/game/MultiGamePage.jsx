@@ -58,7 +58,7 @@ export default function MultiGamePage({ session, profile, isAdmin }) {
 
   const [game, setGame] = useState(null)
   const [players, setPlayers] = useState([])
-  const [oppProfile, setOppProfile] = useState(null)
+  const [oppProfiles, setOppProfiles] = useState({})
   // For waiting-state screens (invite not yet accepted) the opponent
   // isn't in yahdle_players yet — resolve their profile from the game
   // row's created_by / invited_user_id instead.
@@ -74,12 +74,15 @@ export default function MultiGamePage({ session, profile, isAdmin }) {
   const [zeroAskCategory, setZeroAskCategory] = useState(null)
   const [swapIdx, setSwapIdx] = useState(null)
   const [busy, setBusy] = useState(false)
-  const [oppSheetOpen, setOppSheetOpen] = useState(false)
+  const [oppSheetId, setOppSheetId] = useState(null)
   const [animating, setAnimating] = useState(() => new Array(DIE_COUNT).fill(false))
   const { dict, dictReady } = useDictionary()
 
   const myPlayer = players.find(p => p.user_id === userId)
-  const oppPlayer = players.find(p => p.user_id !== userId)
+  const opponents = players
+    .filter(p => p.user_id !== userId)
+    .sort((a, b) => a.player_index - b.player_index)
+  const oppPlayer = opponents[0] ?? null // first opponent — waiting-state fallback only
   const isMyTurn = !!(game && myPlayer && game.status === 'active' && myPlayer.player_index === game.current_player_idx)
   const isGameOver = game?.status === 'finished'
   const isWaiting = game?.status === 'waiting'
@@ -143,11 +146,17 @@ export default function MultiGamePage({ session, profile, isAdmin }) {
 
   useEffect(() => { refresh() }, [refresh])
 
+  const oppIdsKey = opponents.map(o => o.user_id).join(',')
   useEffect(() => {
-    if (!oppPlayer?.user_id) return
-    supabase.from('profiles').select('id, username, avatar_hue').eq('id', oppPlayer.user_id).single()
-      .then(({ data }) => setOppProfile(data ?? null))
-  }, [oppPlayer?.user_id])
+    const ids = oppIdsKey ? oppIdsKey.split(',') : []
+    if (!ids.length) { setOppProfiles({}); return }
+    supabase.from('profiles').select('id, username, avatar_hue').in('id', ids)
+      .then(({ data }) => {
+        const m = {}
+        for (const p of data ?? []) m[p.id] = p
+        setOppProfiles(m)
+      })
+  }, [oppIdsKey])
 
   // In waiting state the invitee isn't in yahdle_players yet, so resolve
   // the "other party" from the game row. Whoever I am, the other party
@@ -345,9 +354,11 @@ export default function MultiGamePage({ session, profile, isAdmin }) {
   }
 
   const myTotal = myPlayer?.total_score ?? 0
-  const oppTotal = oppPlayer?.total_score ?? 0
-  const oppName = oppProfile?.username ?? 'Opponent'
   const myName = profile?.username ?? 'You'
+  const currentPlayer = players.find(p => p.player_index === game?.current_player_idx) ?? null
+  const currentName = currentPlayer
+    ? (currentPlayer.user_id === userId ? 'You' : (oppProfiles[currentPlayer.user_id]?.username ?? 'Opponent'))
+    : ''
 
   const canClaim = (() => {
     if (!game || game.status !== 'active' || !myPlayer) return false
@@ -403,22 +414,28 @@ export default function MultiGamePage({ session, profile, isAdmin }) {
           </div>
         )}
 
-        {/* score pills — only meaningful once both players have joined */}
+        {/* score pills — one per player in seat order; the current
+            player's pill is highlighted (✨). Tap an opponent's pill to
+            see their scorecard. */}
         {game && !isWaiting && (
           <div className="flex flex-wrap gap-2 justify-center">
-            <PlayerPill
-              name={`${myName} (you)`}
-              score={myTotal}
-              isCurrent={isMyTurn && !isGameOver}
-              isWinner={isGameOver && myPlayer?.is_winner}
-            />
-            <PlayerPill
-              name={oppName}
-              score={oppTotal}
-              isCurrent={!isMyTurn && !isGameOver && game.status === 'active'}
-              isWinner={isGameOver && oppPlayer?.is_winner}
-              onClick={() => setOppSheetOpen(true)}
-            />
+            {[...(myPlayer ? [myPlayer] : []), ...opponents]
+              .sort((a, b) => a.player_index - b.player_index)
+              .map(p => {
+                const isMe = p.user_id === userId
+                const prof = isMe ? profile : oppProfiles[p.user_id]
+                const nm = isMe ? `${prof?.username ?? 'You'} (you)` : (prof?.username ?? 'Player')
+                return (
+                  <PlayerPill
+                    key={p.user_id}
+                    name={nm}
+                    score={p.total_score ?? 0}
+                    isCurrent={!isGameOver && game.status === 'active' && p.player_index === game.current_player_idx}
+                    isWinner={isGameOver && p.is_winner}
+                    onClick={isMe ? undefined : () => setOppSheetId(p.user_id)}
+                  />
+                )
+              })}
           </div>
         )}
 
@@ -441,12 +458,9 @@ export default function MultiGamePage({ session, profile, isAdmin }) {
         {isGameOver && game && (
           <GameOverComparison
             game={game}
-            myPlayer={myPlayer}
-            oppPlayer={oppPlayer}
-            myName={myName}
-            oppName={oppName}
-            isMyWin={!!myPlayer?.is_winner && !game.is_tie}
-            isTie={game.is_tie}
+            players={players}
+            profiles={{ ...oppProfiles, [userId]: profile }}
+            myUserId={userId}
             onRematch={handleRematch}
           />
         )}
@@ -488,8 +502,8 @@ export default function MultiGamePage({ session, profile, isAdmin }) {
               </>
             ) : (
               <div className="card p-4 text-center opacity-80">
-                <div className="text-sm font-semibold">{oppName} is rolling…</div>
-                <div className="text-[11px] opacity-60 mt-1">Tap their pill above to see their card</div>
+                <div className="text-sm font-semibold">{currentName} is rolling…</div>
+                <div className="text-[11px] opacity-60 mt-1">Tap a player's pill above to see their card</div>
                 {canClaim && (
                   <button
                     type="button"
@@ -506,15 +520,19 @@ export default function MultiGamePage({ session, profile, isAdmin }) {
 
       </div>
 
-      {oppSheetOpen && oppPlayer && (
-        <OpponentScoreSheet
-          oppPlayer={oppPlayer}
-          oppProfile={oppProfile}
-          totalTurns={TOTAL_TURNS}
-          currentTurn={game?.current_turn ?? 1}
-          onClose={() => setOppSheetOpen(false)}
-        />
-      )}
+      {oppSheetId && (() => {
+        const op = opponents.find(o => o.user_id === oppSheetId)
+        if (!op) return null
+        return (
+          <OpponentScoreSheet
+            oppPlayer={op}
+            oppProfile={oppProfiles[oppSheetId]}
+            totalTurns={TOTAL_TURNS}
+            currentTurn={game?.current_turn ?? 1}
+            onClose={() => setOppSheetId(null)}
+          />
+        )
+      })()}
     </SQBoardShell>
   )
 }
@@ -586,7 +604,7 @@ function WaitingCard({
             {display} has an open game
           </div>
           <p className="text-sm opacity-70 mt-1">
-            Join to start a 1v1.
+            Join to take a seat.
           </p>
         </div>
         <div className="flex gap-2 justify-center pt-1">

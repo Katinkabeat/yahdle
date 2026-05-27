@@ -39,14 +39,16 @@ export function useMultiplayerLobby(userId) {
         supabase
           .from('yahdle_games')
           .select('*, yahdle_players(*)')
-          .or(`created_by.eq.${userId},invited_user_id.eq.${userId}`)
+          .or(`created_by.eq.${userId},invited_user_id.eq.${userId},invited_user_ids.cs.{${userId}}`)
           .order('last_activity_at', { ascending: false }),
         supabase.rpc('yahdle_list_open_games'),
       ])
       if (gErr) throw gErr
 
       const list = games ?? []
-      const pending = list.filter(g => g.status === 'waiting' && g.invited_user_id === userId)
+      const amInvited = g => g.invited_user_id === userId || (g.invited_user_ids ?? []).includes(userId)
+      const amPlayer  = g => (g.yahdle_players ?? []).some(p => p.user_id === userId)
+      const pending = list.filter(g => g.status === 'waiting' && amInvited(g) && !amPlayer(g))
       const sent    = list.filter(g => g.status === 'waiting' && g.created_by === userId)
       const active = list.filter(g => g.status === 'active')
       const finished = list.filter(g => g.status === 'finished').slice(0, 10)

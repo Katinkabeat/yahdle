@@ -111,21 +111,30 @@ serve(async (req: Request) => {
     const payload = await req.json()
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY)
 
-    // ── game_invited: yahdle_games INSERT with invited_user_id ──
+    // ── game_invited: yahdle_games INSERT with invitee(s) ──
+    // Fans out to every invited user (multi-friend games), falling back
+    // to the single invited_user_id for older 1v1 rows.
     if (payload.type === 'game_invited') {
       const { record } = payload
-      if (!record?.id || !record.created_by || !record.invited_user_id) {
+      const invitees: string[] = (Array.isArray(record?.invited_user_ids) && record.invited_user_ids.length)
+        ? record.invited_user_ids
+        : (record?.invited_user_id ? [record.invited_user_id] : [])
+      if (!record?.id || !record.created_by || !invitees.length) {
         return new Response(JSON.stringify({ skipped: 'missing fields' }), { status: 200, headers: corsHeaders })
       }
       const inviterName = await getUsername(supabase, record.created_by)
-      const result = await sendIfOptedIn(supabase, record.invited_user_id, 'yahdle', 'invite', {
-        title: 'Yahdle — game invite',
-        body: `${inviterName} invited you to a Yahdle game. Tap to play! 🎲`,
-        tag: `yahdle-invite-${record.id}`,
-        url: gameUrl(record.id),
-        icon: ICON,
-      })
-      return new Response(JSON.stringify(result), { status: 200, headers: corsHeaders })
+      const results: any[] = []
+      for (const inviteeId of invitees) {
+        const r = await sendIfOptedIn(supabase, inviteeId, 'yahdle', 'invite', {
+          title: 'Yahdle — game invite',
+          body: `${inviterName} invited you to a Yahdle game. Tap to play! 🎲`,
+          tag: `yahdle-invite-${record.id}`,
+          url: gameUrl(record.id),
+          icon: ICON,
+        })
+        results.push({ user_id: inviteeId, ...r })
+      }
+      return new Response(JSON.stringify({ results }), { status: 200, headers: corsHeaders })
     }
 
     // ── opponent_joined: yahdle_games UPDATE waiting→active ──
@@ -187,9 +196,12 @@ serve(async (req: Request) => {
     }
 
     // ── game_finished: yahdle_games UPDATE active→finished ──
+    // Fans out to every player. Outcome comes from yahdle_players.is_winner
+    // (authoritative for N players — the top-score group all win, so a
+    // tie-for-first reads as a win for each tied player).
     if (payload.type === 'game_finished') {
       const { record } = payload
-      if (!record?.id || !record.created_by || !record.invited_user_id) {
+      if (!record?.id) {
         return new Response(JSON.stringify({ skipped: 'missing fields' }), { status: 200, headers: corsHeaders })
       }
       // Admin closes are silent — they're only used for cleaning up
@@ -198,29 +210,35 @@ serve(async (req: Request) => {
         return new Response(JSON.stringify({ skipped: 'closed_by_admin' }), { status: 200, headers: corsHeaders })
       }
 
-      const players: string[] = [record.created_by, record.invited_user_id]
+      const { data: pls } = await supabase
+        .from('yahdle_players')
+        .select('user_id, is_winner')
+        .eq('game_id', record.id)
+      const playerRows = pls ?? []
+      if (!playerRows.length) {
+        return new Response(JSON.stringify({ skipped: 'no players' }), { status: 200, headers: corsHeaders })
+      }
+
+      const winners = playerRows.filter((p: any) => p.is_winner)
+      const winnerIds = new Set(winners.map((p: any) => p.user_id))
+      const winnerNames: string[] = []
+      for (const w of winners) winnerNames.push(await getUsername(supabase, w.user_id))
+      const winnerLabel = winnerNames.join(' & ') || 'Someone'
+      const tie = winners.length > 1
+
       const results: any[] = []
-
-      for (const userId of players) {
-        const opponentId = userId === record.created_by ? record.invited_user_id : record.created_by
-        const opponentName = await getUsername(supabase, opponentId)
-
+      for (const p of playerRows) {
+        const userId = p.user_id
         let title = 'Yahdle — game over'
         let body: string
 
-        if (record.forfeit_user_id) {
-          if (record.forfeit_user_id === userId) {
-            body = `You forfeited your game vs ${opponentName}.`
-          } else {
-            body = `${opponentName} forfeited — you win! 🏆`
-          }
-        } else if (record.is_tie) {
-          body = `Tie game vs ${opponentName}!`
-        } else if (record.winner_user_id === userId) {
+        if (record.forfeit_user_id === userId) {
+          body = 'You forfeited the game.'
+        } else if (winnerIds.has(userId)) {
           title = 'Yahdle — you won!'
-          body = `You beat ${opponentName}! 🏆`
+          body = tie ? 'You tied for 1st! 🏆' : 'You won! 🏆'
         } else {
-          body = `${opponentName} won. Rematch? 🎲`
+          body = `${winnerLabel} won${tie ? ' (tie)' : ''}. Rematch? 🎲`
         }
 
         const r = await sendIfOptedIn(supabase, userId, 'yahdle', 'game_finished', {

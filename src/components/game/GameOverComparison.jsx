@@ -1,36 +1,39 @@
 import { CATEGORIES } from '../../lib/scoring.js'
 
-// Single-column row layout fitting all 12 categories on mobile.
-// Green (you) / pink (opponent) marks who won each row. Used both
-// inline at game-end and as the destination from the completed-games
-// card on the lobby.
-export default function GameOverComparison({
-  game,
-  myPlayer,
-  oppPlayer,
-  myName,
-  oppName,
-  isMyWin,
-  isTie,
-  onRematch,
-}) {
-  const myTotal = myPlayer?.total_score ?? 0
-  const oppTotal = oppPlayer?.total_score ?? 0
+// Final-score comparison grid for 2–4 players. One column per player
+// (in seat order, you first), the per-row leader marked green, a totals
+// row, and an outcome banner. Top-score group all win (a tie-for-first
+// shows every tied player as a winner). Reached inline at game-end and
+// from the completed-games card on the lobby.
+export default function GameOverComparison({ game, players, profiles, myUserId, onRematch }) {
+  const ordered = [...(players ?? [])].sort((a, b) => a.player_index - b.player_index)
+  const nameFor = (p) =>
+    p.user_id === myUserId ? 'You' : (profiles?.[p.user_id]?.username ?? 'Player')
+
+  const totalFor = (p) => p?.total_score ?? 0
+  const maxTotal = ordered.length ? Math.max(...ordered.map(totalFor)) : 0
+  const winners = ordered.filter(p => p.is_winner)
+  const iWon = winners.some(p => p.user_id === myUserId)
+  const winnerNames = winners.map(nameFor)
 
   let banner
   if (game?.closed_by_admin) {
     banner = { emoji: '🛑', text: 'Game closed by admin', sub: game.close_reason ?? '' }
   } else if (game?.forfeit_user_id) {
-    const forfeiter = game.forfeit_user_id === myPlayer?.user_id ? myName : oppName
-    const winner = game.forfeit_user_id === myPlayer?.user_id ? oppName : myName
-    banner = { emoji: '🏳️', text: `${forfeiter} forfeited`, sub: `${winner} wins!` }
-  } else if (isTie) {
-    banner = { emoji: '🤝', text: "It's a tie!", sub: `${myTotal} — ${oppTotal}` }
-  } else if (isMyWin) {
-    banner = { emoji: '🏆', text: 'You win!', sub: `${myTotal} — ${oppTotal}` }
+    const quitter = ordered.find(p => p.user_id === game.forfeit_user_id)
+    banner = {
+      emoji: '🏳️',
+      text: `${quitter ? nameFor(quitter) : 'A player'} forfeited`,
+      sub: winners.length ? `${winnerNames.join(' & ')} win${winners.length > 1 ? '' : 's'}!` : '',
+    }
+  } else if (iWon) {
+    const others = winners.filter(p => p.user_id !== myUserId).map(nameFor)
+    banner = { emoji: '🏆', text: 'You win!', sub: others.length ? `Tied for 1st with ${others.join(', ')}` : `${maxTotal} pts` }
   } else {
-    banner = { emoji: '🏆', text: `${oppName} wins!`, sub: `${myTotal} — ${oppTotal}` }
+    banner = { emoji: '🏆', text: `${winnerNames.join(' & ')} win${winners.length > 1 ? '' : 's'}!`, sub: `${maxTotal} pts` }
   }
+
+  const gridStyle = { gridTemplateColumns: `1fr repeat(${ordered.length}, minmax(34px, auto))` }
 
   return (
     <>
@@ -40,44 +43,57 @@ export default function GameOverComparison({
         {banner.sub && <div className="text-sm opacity-90 mt-0.5">{banner.sub}</div>}
       </div>
 
-      <div className="card p-2">
-        <div className="grid grid-cols-[1fr_auto_auto] gap-2 items-center px-2 py-1 text-[10px] uppercase tracking-wider opacity-60 font-bold">
+      <div className="card p-2 overflow-x-auto">
+        <div className="grid gap-2 items-end px-2 py-1 text-[10px] uppercase tracking-wider opacity-60 font-bold" style={gridStyle}>
           <div>Category</div>
-          <div className="min-w-[34px] text-right">{myName}</div>
-          <div className="min-w-[34px] text-right">{oppName}</div>
+          {ordered.map(p => (
+            <div key={p.user_id} className="min-w-[34px] text-right truncate max-w-[64px] justify-self-end">
+              {nameFor(p)}
+            </div>
+          ))}
         </div>
+
         {CATEGORIES.map((cat, i) => {
-          const my = myPlayer?.scores?.[cat.id] ?? null
-          const op = oppPlayer?.scores?.[cat.id] ?? null
-          const myN = my?.score ?? null
-          const opN = op?.score ?? null
-          const meWin = myN != null && opN != null && myN > opN
-          const themWin = opN != null && myN != null && opN > myN
+          const vals = ordered.map(p => p.scores?.[cat.id]?.score ?? null)
+          const rowMax = Math.max(...vals.map(v => v ?? -1))
           const alt = i % 2 === 1
           return (
             <div
               key={cat.id}
-              className={`grid grid-cols-[1fr_auto_auto] gap-2 items-center px-2 py-1.5 text-xs rounded-md ${alt ? 'bg-white/[0.02]' : ''}`}
+              className={`grid gap-2 items-center px-2 py-1.5 text-xs rounded-md ${alt ? 'bg-white/[0.02]' : ''}`}
+              style={gridStyle}
             >
               <div className="font-semibold">{cat.name}</div>
-              <div className={`min-w-[34px] text-right font-extrabold ${meWin ? 'text-green-400' : ''}`}>
-                {myN ?? '—'}
-              </div>
-              <div className={`min-w-[34px] text-right font-bold ${themWin ? 'text-pink-300' : 'text-wordy-300'}`}>
-                {opN ?? '—'}
-              </div>
+              {vals.map((v, idx) => {
+                const lead = v != null && v === rowMax && rowMax >= 0
+                return (
+                  <div
+                    key={ordered[idx].user_id}
+                    className={`min-w-[34px] text-right font-bold ${lead ? 'text-green-400' : 'text-wordy-300'}`}
+                  >
+                    {v ?? '—'}
+                  </div>
+                )
+              })}
             </div>
           )
         })}
-        <div className="grid grid-cols-[1fr_auto_auto] gap-2 items-center px-2 py-2 mt-1 text-sm border-t border-white/10">
+
+        <div className="grid gap-2 items-center px-2 py-2 mt-1 text-sm border-t border-white/10" style={gridStyle}>
           <div className="font-extrabold">Total</div>
-          <div className="min-w-[34px] text-right font-extrabold">{myTotal}</div>
-          <div className="min-w-[34px] text-right font-extrabold text-wordy-300">{oppTotal}</div>
+          {ordered.map(p => (
+            <div
+              key={p.user_id}
+              className={`min-w-[34px] text-right font-extrabold ${totalFor(p) === maxTotal ? 'text-green-400' : ''}`}
+            >
+              {totalFor(p)}
+            </div>
+          ))}
         </div>
       </div>
 
       {!game?.closed_by_admin && (
-        <div className="grid grid-cols-2 gap-2">
+        <div className="grid grid-cols-1 gap-2">
           <button onClick={onRematch} className="btn-primary">Rematch</button>
         </div>
       )}
