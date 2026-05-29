@@ -14,6 +14,22 @@ Push-your-luck daily word-dice game
 
 ## Session log
 
+### 2026-05-29 — N-player regressions fixed (c149) + smarter invite expiry (c150)
+
+Two post-ship regressions from the c136 N-player work, then a redesign of invite expiry. All shipped + verified at the data layer (live multi-account MP can't be E2E'd headlessly).
+
+- **c149 — rematch RPC broken:** `yahdle_rematch` called `yahdle_create_game(v_opponent)` (single uuid), but the N-player migration DROPPED that overload for `yahdle_create_game(uuid[], int)` → "function yahdle_create_game(uuid) does not exist". Rewrote rematch N-player-aware (`yahdle_nplayer_rematch_fix.sql`): gather all other participants, `yahdle_create_game(others[], n)`, caller seated as creator. Verified by simulating a rematch in a rolled-back txn.
+- **c149 — game vanishes from lobby after you join:** `useMultiplayerLobby` main query filtered only `created_by/invited_user_id/invited_user_ids`. Joining an OPEN game makes you none of those (join sets the legacy `invited_user_id` to the FIRST joiner, not you), so the row never came back at all (the `amPlayer` bucketing fix from c136 was necessary but the row never reached `list`). Fixed: also fetch the `game_id`s I'm seated in (`yahdle_players` where user_id=me) and merge+dedupe. Confirmed on real prod data (old `.or()`→0 rows, seated query→returns it). Also recovers active open-join games dropped the same way.
+- **c150 — smarter invite expiry (replaces silent hard-delete):** `yahdle_invite_expiry_v2.sql`.
+  - Friend-invite window **1 day → 3 days** (open stays 7).
+  - `yahdle_expire_stale_invites()` no longer blanket-DELETEs. Per expired waiting game: **≥2 joined** → drop no-show slots, shrink `max_players` to who's here, START short-handed; **only the creator** → CLOSE (`status='finished'` + new `closed_reason='no_other_players'`, winner null, **skips `yahdle_finalize_game`** so no matchups/stats). `invited_user_ids` kept for pills.
+  - Suppressed the "opponent joined" push on short-handed auto-start via txn-local GUC `yahdle.suppress_join_push` (checked in `yahdle_notify_opponent_joined`). The waiting→finished close path never trips the active→finished `game_finished` trigger.
+  - Edge fn: new `game_closed` type → one push to the lone creator (via the `game_finished` pref bucket). Only push in this flow.
+  - Client: closed games render in Completed as "🚫 Game closed" + blurb (`LobbyPage.jsx`); no-show invitees render as greyed ✗ pills — no score, not tappable, **Option C** style (matches forfeited pill minus strike-through), ✗ glyph (`MultiGamePage.jsx` `PlayerPill`, gated to non-waiting). Mockup `docs/c150-noshow-pills-mockup.html`.
+  - Decisions (Rae-approved): min playable = 2; notify only on close; closed-no-show never counts toward stats; blurb option C; pill style C + ✗.
+- **Carried forward (parked, await Rae's approval):** c151 — make this expiry policy the baseline across all SQ MP games (audit Wordy/Rungles/Snibble first); c152 — bake it into sq-game-starter; c153 — Wordy "claim inactive win" hidden on mobile.
+- Commits: `2fb19da` (c149), `db92adb` + `4d2898f` (c150).
+
 ### 2026-05-27 (later) — N-player multiplayer SHIPPED (c136) + forfeit-continue + c142 fledged
 
 Lifted Yahdle MP from 1v1 → **2–4 players** by porting Wordy's pattern. Built, deployed to prod, verified at the data layer (11 local Postgres sims across the two migrations). **PENDING: live 3–4 account playthrough — can't be headless.**
