@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Yahdle — no-show pill options (c150)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fredoka+One&family=Nunito:wght@400;700;800&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --wordy-50:#faf5ff; --wordy-100:#f3e8ff; --wordy-200:#e9d5ff; --wordy-300:#d8b4fe;
+    --wordy-400:#c084fc; --wordy-500:#a855f7; --wordy-600:#9333ea; --wordy-700:#7e22ce;
+    --wordy-800:#6b21a8; --wordy-900:#581c87;
+  }
+  *{box-sizing:border-box}
+  body{font-family:'Nunito',sans-serif;margin:0;padding:28px 20px 60px;background:#fdfbff;color:#3a2a4d;transition:background .2s,color .2s}
+  body.dark{background:#1b1024;color:#e9d5ff}
+  h1{font-family:'Fredoka One',cursive;font-size:20px;margin:0 0 4px}
+  .sub{opacity:.7;font-size:13px;margin:0 0 22px;max-width:560px;line-height:1.5}
+  .card{max-width:560px;border-radius:18px;padding:18px 16px 20px;margin:0 0 18px;background:#fff;border:1px solid var(--wordy-200);box-shadow:0 2px 10px rgba(88,28,135,.06)}
+  body.dark .card{background:#241433;border-color:#3a2150}
+  .label{font-family:'Fredoka One',cursive;font-size:13px;margin:0 0 3px;color:var(--wordy-700)}
+  body.dark .label{color:var(--wordy-300)}
+  .desc{font-size:12px;opacity:.7;margin:0 0 12px;line-height:1.45}
+  .row{display:flex;flex-wrap:wrap;gap:8px;justify-content:center;padding:10px 0 2px}
+
+  /* ---- real pill base (mirrors PlayerPill) ---- */
+  .pill{display:inline-flex;align-items:center;gap:6px;border-radius:9999px;padding:2px 12px;font-size:12px;font-weight:800;line-height:1.7}
+  .score{font-family:'Fredoka One',cursive;font-size:14px}
+  /* current player (✨) */
+  .pill.cur{background:var(--wordy-200);border:2px solid var(--wordy-500);color:var(--wordy-800)}
+  .pill.cur .score{color:var(--wordy-800)}
+  /* normal seated player */
+  .pill.norm{background:var(--wordy-50);border:1px solid var(--wordy-200);color:var(--wordy-500)}
+  .pill.norm .score{color:var(--wordy-800)}
+  body.dark .pill.norm{background:rgba(168,85,247,.10);border-color:rgba(168,85,247,.28);color:var(--wordy-300)}
+  body.dark .pill.norm .score{color:var(--wordy-200)}
+  body.dark .pill.cur{background:rgba(168,85,247,.30);border-color:var(--wordy-400);color:#fff}
+  body.dark .pill.cur .score{color:#fff}
+
+  /* ---- no-show variants ---- */
+  /* A: muted grey, dashed border, ✗, no score */
+  .pill.nsA{background:#f3f4f6;border:1px dashed #cbd5e1;color:#94a3b8}
+  body.dark .pill.nsA{background:rgba(255,255,255,.04);border-color:rgba(255,255,255,.18);color:#8b8b9c}
+  .pill.nsA .x{font-size:11px;opacity:.9}
+  /* B: faded purple ghost, dashed, ✗ */
+  .pill.nsB{background:rgba(250,245,255,.6);border:1px dashed var(--wordy-300);color:var(--wordy-400)}
+  body.dark .pill.nsB{background:rgba(168,85,247,.06);border-color:rgba(192,132,252,.4);color:rgba(192,132,252,.8)}
+  .pill.nsB .x{font-size:11px}
+  /* C: like the forfeit pill (solid, very muted, ✗) */
+  .pill.nsC{background:rgba(0,0,0,.04);border:1px solid rgba(0,0,0,.10);color:#9ca3af;opacity:.85}
+  body.dark .pill.nsC{background:rgba(255,255,255,.05);border-color:rgba(255,255,255,.10);color:rgba(192,132,252,.55)}
+  .pill.nsC .x{font-size:11px}
+
+  .glyphs{font-size:12px;opacity:.75;margin-top:10px}
+  .glyphs code{font-family:ui-monospace,monospace;background:rgba(128,128,128,.15);padding:1px 6px;border-radius:5px}
+  .toggle{position:fixed;top:14px;right:16px;font-family:'Nunito';font-weight:800;font-size:12px;border:1px solid var(--wordy-300);background:var(--wordy-50);color:var(--wordy-700);border-radius:9999px;padding:6px 14px;cursor:pointer}
+  body.dark .toggle{background:#241433;color:var(--wordy-200);border-color:#3a2150}
+</style>
+</head>
+<body>
+<button class="toggle" onclick="document.body.classList.toggle('dark')">☾ / ☀ toggle dark</button>
+
+<h1>Yahdle — no-show pill (c150)</h1>
+<p class="sub">When a 4-player invite expires with only some friends in, the game starts short-handed and the no-shows show as greyed ✗ pills (no score — they never played). Below: the real pill row (you + 1 who joined, current = ✨) with three treatments for the two no-shows (Onyi, Snuggie). Toggle dark mode top-right.</p>
+
+<div class="card">
+  <div class="label">Option A — muted grey, dashed, ✗</div>
+  <div class="desc">Clearly "not in this game" — neutral grey, dashed outline reads as a placeholder slot.</div>
+  <div class="row">
+    <span class="pill cur">✨ Rae (you) <span class="score">42</span></span>
+    <span class="pill norm">Dino <span class="score">31</span></span>
+    <span class="pill nsA"><span class="x">✗</span> Onyi</span>
+    <span class="pill nsA"><span class="x">✗</span> Snuggie</span>
+  </div>
+</div>
+
+<div class="card">
+  <div class="label">Option B — faded purple ghost, dashed, ✗</div>
+  <div class="desc">Stays in the Yahdle purple family, just faded — feels part of the set but clearly inactive.</div>
+  <div class="row">
+    <span class="pill cur">✨ Rae (you) <span class="score">42</span></span>
+    <span class="pill norm">Dino <span class="score">31</span></span>
+    <span class="pill nsB"><span class="x">✗</span> Onyi</span>
+    <span class="pill nsB"><span class="x">✗</span> Snuggie</span>
+  </div>
+</div>
+
+<div class="card">
+  <div class="label">Option C — matches the existing "forfeited" pill style</div>
+  <div class="desc">Same muted solid treatment Yahdle already uses for a forfeited player (just ✗ instead of 🏳️, no strike-through) — most consistent with what's already on screen.</div>
+  <div class="row">
+    <span class="pill cur">✨ Rae (you) <span class="score">42</span></span>
+    <span class="pill norm">Dino <span class="score">31</span></span>
+    <span class="pill nsC"><span class="x">✗</span> Onyi</span>
+    <span class="pill nsC"><span class="x">✗</span> Snuggie</span>
+  </div>
+  <div class="glyphs">✗ glyph options (all "small x", not the loud red ❌): <code>✗</code> heavy &nbsp; <code>✕</code> thin &nbsp; <code>×</code> times &nbsp; — say which. Red <code>❌</code> available if you want it louder.</div>
+</div>
+
+</body>
+</html>

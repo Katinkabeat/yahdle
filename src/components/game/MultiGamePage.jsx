@@ -94,6 +94,17 @@ export default function MultiGamePage({ session, profile, isAdmin }) {
   const maxSeats = game?.max_players ?? 2
   const hasOpenSeat = seatsFilled < maxSeats
 
+  // Invited friends who never joined before the game started short-handed
+  // (c150). Only meaningful once the game is past 'waiting' — while waiting
+  // they're still pending, not no-shows. invited_user_ids is kept on the row
+  // even after the expire sweep shrinks the seats, so we can show them as
+  // greyed ✗ pills.
+  const noShowIds = useMemo(() => {
+    if (!game || game.status === 'waiting') return []
+    const seated = new Set(players.map(p => p.user_id))
+    return (game.invited_user_ids ?? []).filter(id => id && !seated.has(id))
+  }, [game, players])
+
   const faces = useMemo(() => normalizeFaces(myTurnState.faces), [myTurnState.faces])
   const inBuilder = useMemo(() => {
     const set = new Set((myTurnState.builder ?? []).map(b => b.dieIdx))
@@ -150,7 +161,8 @@ export default function MultiGamePage({ session, profile, isAdmin }) {
 
   useEffect(() => { refresh() }, [refresh])
 
-  const oppIdsKey = opponents.map(o => o.user_id).join(',')
+  // Fetch profiles for opponents AND no-show invitees (for the greyed pills).
+  const oppIdsKey = [...new Set([...opponents.map(o => o.user_id), ...noShowIds])].join(',')
   useEffect(() => {
     const ids = oppIdsKey ? oppIdsKey.split(',') : []
     if (!ids.length) { setOppProfiles({}); return }
@@ -449,6 +461,15 @@ export default function MultiGamePage({ session, profile, isAdmin }) {
                   />
                 )
               })}
+            {/* No-show invitees on a short-handed game — greyed ✗ pills,
+                no score (they never played), not tappable (no card). c150 */}
+            {noShowIds.map(id => (
+              <PlayerPill
+                key={`noshow-${id}`}
+                name={oppProfiles[id]?.username ?? 'Player'}
+                noShow
+              />
+            ))}
           </div>
         )}
 
@@ -691,23 +712,29 @@ function WaitingCard({
   )
 }
 
-function PlayerPill({ name, score, isCurrent, isWinner, isOut, onClick }) {
+function PlayerPill({ name, score, isCurrent, isWinner, isOut, noShow, onClick }) {
   const base = 'inline-flex items-center gap-1.5 rounded-full px-3 py-0.5 text-xs font-bold transition-all'
-  const cls = isOut
-    ? 'bg-white/5 border border-white/10 text-wordy-400/60 line-through'
-    : isWinner
-      ? 'bg-yellow-50 border-2 border-yellow-400 text-yellow-800'
-      : isCurrent
-        ? 'bg-wordy-200 border-2 border-wordy-500 text-wordy-800'
-        : 'bg-wordy-50 border border-wordy-200 text-wordy-500'
+  // noShow = invited friend who never joined a short-handed game (c150).
+  // Matches the forfeited pill treatment but without the strike-through,
+  // a ✗ marker, and no score (they never played).
+  const cls = noShow
+    ? 'bg-white/5 border border-white/10 text-wordy-400/60'
+    : isOut
+      ? 'bg-white/5 border border-white/10 text-wordy-400/60 line-through'
+      : isWinner
+        ? 'bg-yellow-50 border-2 border-yellow-400 text-yellow-800'
+        : isCurrent
+          ? 'bg-wordy-200 border-2 border-wordy-500 text-wordy-800'
+          : 'bg-wordy-50 border border-wordy-200 text-wordy-500'
   const Tag = onClick ? 'button' : 'span'
   return (
     <Tag onClick={onClick} className={`${base} ${cls}`}>
-      {isOut && <span className="no-underline">🏳️</span>}
-      {!isOut && isWinner && <span>🏆</span>}
-      {!isOut && !isWinner && isCurrent && <span>✨</span>}
+      {noShow && <span className="text-[11px]">✗</span>}
+      {!noShow && isOut && <span className="no-underline">🏳️</span>}
+      {!noShow && !isOut && isWinner && <span>🏆</span>}
+      {!noShow && !isOut && !isWinner && isCurrent && <span>✨</span>}
       <span>{name}</span>
-      <span className={`font-display text-sm ${isOut ? '' : 'text-wordy-800'}`}>{score}</span>
+      {!noShow && <span className={`font-display text-sm ${isOut ? '' : 'text-wordy-800'}`}>{score}</span>}
     </Tag>
   )
 }
