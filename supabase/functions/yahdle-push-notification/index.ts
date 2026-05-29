@@ -15,6 +15,8 @@
 //   5. nudge            — client POST (after yahdle_nudge RPC stamps the
 //                         12h cooldown). Reminds the current player it's
 //                         their turn.
+//   6. game_closed      — expire sweep closed a never-filled game (only
+//                         the creator was seated). Notifies the creator.
 //
 // Reuses the unified push_subscriptions table. Subscription fallback
 // order: ['sidequest', 'yahdle'] — most users opt in via the SQ hub.
@@ -254,6 +256,25 @@ serve(async (req: Request) => {
         results.push({ user_id: userId, ...r })
       }
       return new Response(JSON.stringify({ results }), { status: 200, headers: corsHeaders })
+    }
+
+    // ── game_closed: expire sweep closed a never-filled game ──
+    // Only fires when just the creator was seated at expiry (unplayable),
+    // so there's exactly one recipient. Reuses the game_finished pref
+    // bucket so it honors the same opt-out.
+    if (payload.type === 'game_closed') {
+      const { record } = payload
+      if (!record?.id || !record.created_by) {
+        return new Response(JSON.stringify({ skipped: 'missing fields' }), { status: 200, headers: corsHeaders })
+      }
+      const result = await sendIfOptedIn(supabase, record.created_by, 'yahdle', 'game_finished', {
+        title: 'Yahdle — game closed',
+        body: 'Your game closed because no one else joined in time. 🎲',
+        tag: `yahdle-closed-${record.id}`,
+        url: '/yahdle/',
+        icon: ICON,
+      })
+      return new Response(JSON.stringify(result), { status: 200, headers: corsHeaders })
     }
 
     // ── nudge: client POST, remind the current player it's their turn ──

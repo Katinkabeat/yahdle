@@ -20,7 +20,10 @@ export default function LobbyPage({ session, profile, isAdmin }) {
     const oppName = opp?.username ?? 'Opponent'
     const myName = profile?.username ?? 'You'
     let headline
-    if (g.closed_by_admin) {
+    if (g.closed_reason === 'no_other_players') {
+      // Expired before anyone else joined — never started, no score line.
+      headline = '🚫 Game closed'
+    } else if (g.closed_by_admin) {
       headline = '🛑 Game closed by admin'
     } else if (g.forfeit_user_id) {
       const forfeiter = g.forfeit_user_id === user?.id ? myName : oppName
@@ -35,7 +38,9 @@ export default function LobbyPage({ session, profile, isAdmin }) {
     } else {
       headline = '🏆 Game finished'
     }
-    const subtitle = `You ${myPlayer?.total_score ?? 0} — ${oppName} ${oppPlayer?.total_score ?? 0}`
+    const subtitle = g.closed_reason === 'no_other_players'
+      ? 'Invite expired — this game closed because no other players joined.'
+      : `You ${myPlayer?.total_score ?? 0} — ${oppName} ${oppPlayer?.total_score ?? 0}`
     return { id: g.id, headline, subtitle }
   })
 
