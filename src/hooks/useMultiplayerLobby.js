@@ -34,18 +34,36 @@ export function useMultiplayerLobby(userId) {
         supabase.rpc('yahdle_expire_stale_invites').then(() => {}, () => {})
       }
 
-      // My games + open games I might join. Single round-trip.
-      const [{ data: games, error: gErr }, { data: open }] = await Promise.all([
+      // My games (created or invited) + the game_ids I'm seated in + open
+      // games I might join. The created_by/invited filter alone MISSES open
+      // games I joined: there I'm neither the creator nor in invited_user_ids
+      // (join sets the legacy invited_user_id to the FIRST joiner, not me), so
+      // the row never came back and the game vanished from my lobby once I
+      // joined. Fetching my seated game_ids and merging closes that gap.
+      const [{ data: games, error: gErr }, { data: open }, { data: seatRows }] = await Promise.all([
         supabase
           .from('yahdle_games')
           .select('*, yahdle_players(*)')
           .or(`created_by.eq.${userId},invited_user_id.eq.${userId},invited_user_ids.cs.{${userId}}`)
           .order('last_activity_at', { ascending: false }),
         supabase.rpc('yahdle_list_open_games'),
+        supabase.from('yahdle_players').select('game_id').eq('user_id', userId),
       ])
       if (gErr) throw gErr
 
-      const list = games ?? []
+      // Pull the games I'm seated in that the created_by/invited query didn't
+      // already return, then merge + dedupe by id.
+      const byId = new Map((games ?? []).map(g => [g.id, g]))
+      const missingIds = (seatRows ?? []).map(r => r.game_id).filter(id => !byId.has(id))
+      if (missingIds.length > 0) {
+        const { data: seated } = await supabase
+          .from('yahdle_games')
+          .select('*, yahdle_players(*)')
+          .in('id', missingIds)
+        for (const g of seated ?? []) byId.set(g.id, g)
+      }
+      const list = Array.from(byId.values())
+        .sort((a, b) => new Date(b.last_activity_at) - new Date(a.last_activity_at))
       const amInvited = g => g.invited_user_id === userId || (g.invited_user_ids ?? []).includes(userId)
       const amPlayer  = g => (g.yahdle_players ?? []).some(p => p.user_id === userId)
       const pending = list.filter(g => g.status === 'waiting' && amInvited(g) && !amPlayer(g))
