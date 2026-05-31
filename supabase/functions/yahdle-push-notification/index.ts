@@ -142,6 +142,25 @@ serve(async (req: Request) => {
       return new Response(JSON.stringify({ results }), { status: 200, headers: corsHeaders })
     }
 
+    // ── invite_declined (from yahdle_decline_invite RPC) ──
+    // Yahdle invites are 1v1; a decline deletes the waiting game.
+    // Gated by the creator's 'invite_declined' pref (default OFF).
+    if (payload.type === 'invite_declined') {
+      const { game_id, creator_id, decliner_id } = payload
+      if (!creator_id) {
+        return new Response(JSON.stringify({ skipped: 'no creator' }), { status: 200, headers: corsHeaders })
+      }
+      const declinerName = decliner_id ? await getUsername(supabase, decliner_id) : 'A friend'
+      const result = await sendIfOptedIn(supabase, creator_id, 'yahdle', 'invite_declined', {
+        title: 'Yahdle',
+        body: `${declinerName} couldn’t join this round. Tap to start another. 🎲`,
+        tag: `yahdle-declined-${game_id}`,
+        url: '/yahdle/',
+        icon: ICON,
+      })
+      return new Response(JSON.stringify(result), { status: 200, headers: corsHeaders })
+    }
+
     // ── opponent_joined: yahdle_games UPDATE waiting→active ──
     if (payload.type === 'opponent_joined') {
       const { record } = payload
