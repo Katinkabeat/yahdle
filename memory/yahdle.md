@@ -149,3 +149,7 @@ Migration: `supabase/migrations/yahdle_drop_rng_salt.sql` — `alter table publi
 If we ever ship deterministic MP RNG, re-add a salt column (or per-turn nonces) when the feature actually lands.
 
 **Commit:** `6827ae2`.
+
+## 2026-05-31 — Opt-in decline-notify (c172)
+
+Yahdle already had decline (yahdle_decline_invite, deletes the waiting 1v1 row). Phase 2 (yahdle_decline_notify.sql): CREATE OR REPLACE captures created_by via RETURNING before the delete, then net.http_post's an 'invite_declined' push to yahdle-push-notification edge fn, gated by the new per-game 'invite_declined' notif topic (default OFF, opt-in in hub NotificationsPanel). Edge fn handles the type via sendIfOptedIn. Verified via rolled-back impersonation test (row deleted + exactly-1-push) + live smoke test on deployed fn. Authed device-side push NOT E2E'd — Rae to confirm.
