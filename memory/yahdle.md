@@ -16,7 +16,7 @@ Push-your-luck daily word-dice game
 
 ### 2026-06-06 — single-rematch accept handshake (c165) SHIPPED
 
-Replaced the unilateral rematch (both players could each fire `yahdle_rematch`, spawning two parallel games) with a one-open-request-per-game accept/decline handshake. **1v1 only**; N-player finished games (not creatable via the current lobby UI) keep the legacy unilateral `yahdle_rematch`. Built + deployed + verified at the DB layer and via a throwaway render harness; the live two-session click/flip can't be E2E'd headlessly (auth gate) so it's unverified live, but render + all RPC branches are.
+Replaced the unilateral rematch (both players could each fire `yahdle_rematch`, spawning two parallel games) with a one-open-request-per-game accept/decline handshake. **1v1 only**; N-player finished games (not creatable via the current lobby UI) keep the legacy unilateral `yahdle_rematch`. Built + deployed + verified at the DB layer and via a throwaway render harness. **CONFIRMED working in Rae's live two-session test (2026-06-06):** both players saw Rematch, clicking claimed it, the opponent got Accept/Decline, Accept dropped both into a fresh game. Only blemish — ~10s before the opponent's board flipped to Accept/Decline, which is the **same realtime-propagation latency** as the turn-change lag (c181), NOT a rematch bug.
 
 - **Migration `yahdle_rematch_handshake.sql`** (applied to prod via pooler psql): adds `yahdle_games.rematch_requested_by` + `rematch_new_game_id`. Three SECDEF RPCs:
   - `yahdle_request_rematch` — `select … for update` row lock makes "first click wins" resolve server-side; rejects a second different requester ("opponent already requested"). Guards finished + 2-player + participant + not-already-accepted.
