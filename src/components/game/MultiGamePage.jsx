@@ -233,7 +233,12 @@ export default function MultiGamePage({ session, profile, isAdmin }) {
       { event: 'UPDATE', schema: 'public', table: 'yahdle_turn_state', filter: `game_id=eq.${gameId}` },
     ] : [],
     onChange: refresh,
-    pollMs: 15_000,
+    // Worst-case floor when realtime (flaky on free-tier) and the push-
+    // refresh both miss. Only fires while the tab is actually VISIBLE
+    // (see useRealtimeChannel), so a backgrounded/hidden game costs nothing
+    // — keeps free-tier egress negligible while cutting the visible-but-
+    // stale wait from 15s to 6s.
+    pollMs: 6_000,
     enabled: !!gameId,
   })
 
