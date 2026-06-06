@@ -21,6 +21,11 @@ if ('serviceWorker' in navigator) {
   navigator.serviceWorker.addEventListener('message', (event) => {
     if (event.data?.type === 'NAVIGATE' && event.data.url) {
       window.location.href = event.data.url
+    } else if (event.data?.type === 'REFRESH') {
+      // The SW got a push (turn change, rematch, etc.) — wake the active
+      // page to refresh immediately rather than waiting on the realtime
+      // socket or the poll. Pages opt in by listening for this event.
+      window.dispatchEvent(new CustomEvent('sq:push-refresh', { detail: { url: event.data.url } }))
     }
   })
 }
