@@ -28,6 +28,9 @@ import {
   forfeitGame,
   claimInactiveWin,
   rematch,
+  requestRematch,
+  acceptRematch,
+  declineRematch,
   acceptInvite,
   cancelInvite,
   joinOpenGame,
@@ -75,6 +78,9 @@ export default function MultiGamePage({ session, profile, isAdmin }) {
   const [swapIdx, setSwapIdx] = useState(null)
   const [busy, setBusy] = useState(false)
   const [oppSheetId, setOppSheetId] = useState(null)
+  const [rematchBusy, setRematchBusy] = useState(false)
+  // Guards the requester's one-shot auto-jump into the accepted game.
+  const rematchNavigated = useRef(false)
   const [animating, setAnimating] = useState(() => new Array(DIE_COUNT).fill(false))
   const { dict, dictReady } = useDictionary()
 
@@ -221,6 +227,18 @@ export default function MultiGamePage({ session, profile, isAdmin }) {
     enabled: !!gameId,
   })
 
+  // When my opponent accepts the rematch I requested, the finished game
+  // gets back-linked to the new game (c165). Auto-jump the requester into
+  // it — the accepter navigates directly from handleAcceptRematch. Fire
+  // once; only for the player who actually requested.
+  useEffect(() => {
+    if (!game?.rematch_new_game_id || rematchNavigated.current) return
+    if (game.rematch_requested_by !== userId) return
+    rematchNavigated.current = true
+    toast.success('Rematch on!')
+    navigate(`/multi/${game.rematch_new_game_id}`)
+  }, [game?.rematch_new_game_id, game?.rematch_requested_by, userId, navigate])
+
   // withBusy gates actions that need a server round-trip before the UI
   // can reflect the next state (Roll, Score). Optimistic actions
   // (park/unpark/swap/clear) update local state immediately and let the
@@ -366,6 +384,7 @@ export default function MultiGamePage({ session, profile, isAdmin }) {
     }
   }
 
+  // Legacy unilateral rematch — only reached for N-player games.
   async function handleRematch() {
     try {
       await rematch(gameId)
@@ -373,6 +392,46 @@ export default function MultiGamePage({ session, profile, isAdmin }) {
       navigate('/')
     } catch (err) {
       toast.error(err.message || 'Rematch failed')
+    }
+  }
+
+  // 1v1 single-rematch handshake (c165).
+  async function handleRequestRematch() {
+    if (rematchBusy) return
+    setRematchBusy(true)
+    try {
+      await requestRematch(gameId)
+      toast.success('Rematch requested!')
+      await refresh()
+    } catch (err) {
+      toast.error(err.message || 'Rematch failed')
+    } finally {
+      setRematchBusy(false)
+    }
+  }
+
+  async function handleAcceptRematch() {
+    if (rematchBusy) return
+    setRematchBusy(true)
+    try {
+      const newId = await acceptRematch(gameId)
+      navigate(`/multi/${newId}`)
+    } catch (err) {
+      toast.error(err.message || 'Rematch failed')
+      setRematchBusy(false)
+    }
+  }
+
+  async function handleDeclineRematch() {
+    if (rematchBusy) return
+    setRematchBusy(true)
+    try {
+      await declineRematch(gameId)
+      await refresh()
+    } catch (err) {
+      toast.error(err.message || 'Failed')
+    } finally {
+      setRematchBusy(false)
     }
   }
 
@@ -500,6 +559,10 @@ export default function MultiGamePage({ session, profile, isAdmin }) {
             profiles={{ ...oppProfiles, [userId]: profile }}
             myUserId={userId}
             onRematch={handleRematch}
+            onRequestRematch={handleRequestRematch}
+            onAcceptRematch={handleAcceptRematch}
+            onDeclineRematch={handleDeclineRematch}
+            rematchBusy={rematchBusy}
           />
         )}
 

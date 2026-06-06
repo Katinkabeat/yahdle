@@ -183,6 +183,36 @@ serve(async (req: Request) => {
       return new Response(JSON.stringify(result), { status: 200, headers: corsHeaders })
     }
 
+    // ── rematch_requested: client POST after yahdle_request_rematch ──
+    // A finished-game player claimed the single rematch slot; ping the
+    // other player so they can accept. Reuses the 'invite' pref bucket
+    // and tap target is the finished game (where Accept/Decline lives).
+    if (payload.type === 'rematch_requested') {
+      const { game_id } = payload
+      const { data: game } = await supabase
+        .from('yahdle_games')
+        .select('id, created_by, invited_user_id, rematch_requested_by, status')
+        .eq('id', game_id)
+        .single()
+      if (!game || game.status !== 'finished' || !game.rematch_requested_by) {
+        return new Response(JSON.stringify({ skipped: 'no open request' }), { status: 200, headers: corsHeaders })
+      }
+      const requester = game.rematch_requested_by
+      const recipient = requester === game.created_by ? game.invited_user_id : game.created_by
+      if (!recipient) {
+        return new Response(JSON.stringify({ skipped: 'no recipient' }), { status: 200, headers: corsHeaders })
+      }
+      const requesterName = await getUsername(supabase, requester)
+      const result = await sendIfOptedIn(supabase, recipient, 'yahdle', 'invite', {
+        title: 'Yahdle — rematch?',
+        body: `${requesterName} wants a rematch! Tap to accept. 🎲`,
+        tag: `yahdle-rematch-${game_id}`,
+        url: gameUrl(game_id),
+        icon: ICON,
+      })
+      return new Response(JSON.stringify(result), { status: 200, headers: corsHeaders })
+    }
+
     // ── opponent_joined: yahdle_games UPDATE waiting→active ──
     if (payload.type === 'opponent_joined') {
       const { record } = payload

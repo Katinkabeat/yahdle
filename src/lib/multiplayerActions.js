@@ -117,10 +117,42 @@ export async function sendNudge(gameId, nudgerName) {
   }).catch(() => {})
 }
 
+// Legacy unilateral rematch — still used as the fallback for N-player
+// games, which don't have clean accept-handshake semantics.
 export async function rematch(prevGameId) {
   const { data, error } = await supabase.rpc('yahdle_rematch', { p_game_id: prevGameId })
   if (error) throw error
   return { gameId: data }
+}
+
+// Single-rematch handshake (c165) — 1v1. requestRematch claims the one
+// open slot on the finished game and fire-and-forget pings the opponent
+// (reusing the invite push bucket). acceptRematch (called by the other
+// player) spawns the fresh active game and returns its id. declineRematch
+// clears the open request for either player; it does NOT notify.
+export async function requestRematch(prevGameId) {
+  const { error } = await supabase.rpc('yahdle_request_rematch', { p_game_id: prevGameId })
+  if (error) throw error
+  fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/yahdle-push-notification`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
+      'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY,
+    },
+    body: JSON.stringify({ type: 'rematch_requested', game_id: prevGameId }),
+  }).catch(() => {})
+}
+
+export async function acceptRematch(prevGameId) {
+  const { data, error } = await supabase.rpc('yahdle_accept_rematch', { p_game_id: prevGameId })
+  if (error) throw error
+  return data // new game id
+}
+
+export async function declineRematch(prevGameId) {
+  const { error } = await supabase.rpc('yahdle_decline_rematch', { p_game_id: prevGameId })
+  if (error) throw error
 }
 
 // Admin-only — gated by the shared `public.admins` table's

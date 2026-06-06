@@ -5,7 +5,10 @@ import { CATEGORIES } from '../../lib/scoring.js'
 // row, and an outcome banner. Top-score group all win (a tie-for-first
 // shows every tied player as a winner). Reached inline at game-end and
 // from the completed-games card on the lobby.
-export default function GameOverComparison({ game, players, profiles, myUserId, onRematch }) {
+export default function GameOverComparison({
+  game, players, profiles, myUserId,
+  onRematch, onRequestRematch, onAcceptRematch, onDeclineRematch, rematchBusy,
+}) {
   const ordered = [...(players ?? [])].sort((a, b) => a.player_index - b.player_index)
   const nameFor = (p) =>
     p.user_id === myUserId ? 'You' : (profiles?.[p.user_id]?.username ?? 'Player')
@@ -93,10 +96,75 @@ export default function GameOverComparison({ game, players, profiles, myUserId, 
       </div>
 
       {!game?.closed_by_admin && (
-        <div className="grid grid-cols-1 gap-2">
-          <button onClick={onRematch} className="btn-primary">Rematch</button>
-        </div>
+        <RematchControls
+          game={game}
+          myUserId={myUserId}
+          onRematch={onRematch}
+          onRequestRematch={onRequestRematch}
+          onAcceptRematch={onAcceptRematch}
+          onDeclineRematch={onDeclineRematch}
+          busy={rematchBusy}
+        />
       )}
     </>
+  )
+}
+
+// Single-rematch handshake controls (c165). 1v1 games get the
+// one-open-request flow; N-player games (not creatable in the current
+// lobby) keep the legacy unilateral re-invite button.
+function RematchControls({ game, myUserId, onRematch, onRequestRematch, onAcceptRematch, onDeclineRematch, busy }) {
+  const isDuel = (game?.max_players ?? 2) === 2
+  if (!isDuel) {
+    return (
+      <div className="grid grid-cols-1 gap-2">
+        <button onClick={onRematch} className="btn-primary">Rematch</button>
+      </div>
+    )
+  }
+
+  const reqBy = game?.rematch_requested_by ?? null
+
+  // I claimed the rematch — waiting on my opponent to accept.
+  if (reqBy && reqBy === myUserId) {
+    return (
+      <div className="card p-3 text-center space-y-2">
+        <div className="text-sm font-semibold">Rematch requested ⏳</div>
+        <div className="text-[11px] opacity-60">Waiting for your opponent to accept.</div>
+        <button
+          onClick={onDeclineRematch}
+          disabled={busy}
+          className="text-xs px-3 py-1.5 rounded-full border border-white/15 opacity-70 hover:opacity-100 disabled:opacity-40"
+        >
+          Cancel request
+        </button>
+      </div>
+    )
+  }
+
+  // My opponent claimed it — accept or decline.
+  if (reqBy && reqBy !== myUserId) {
+    return (
+      <div className="card p-3 text-center space-y-2">
+        <div className="text-sm font-semibold">Your opponent wants a rematch! 🎲</div>
+        <div className="grid grid-cols-2 gap-2 pt-1">
+          <button onClick={onAcceptRematch} disabled={busy} className="btn-primary disabled:opacity-50">Accept</button>
+          <button
+            onClick={onDeclineRematch}
+            disabled={busy}
+            className="px-3 py-2 rounded-lg border border-wordy-200 text-wordy-600 hover:bg-wordy-50 disabled:opacity-50"
+          >
+            Decline
+          </button>
+        </div>
+      </div>
+    )
+  }
+
+  // No open request yet.
+  return (
+    <div className="grid grid-cols-1 gap-2">
+      <button onClick={onRequestRematch} disabled={busy} className="btn-primary disabled:opacity-50">Rematch</button>
+    </div>
   )
 }
