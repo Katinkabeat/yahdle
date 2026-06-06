@@ -27,6 +27,12 @@ Replaced the unilateral rematch (both players could each fire `yahdle_rematch`, 
 - **Verified:** migration clean; edge fn deployed; full handshake simulated against a real finished 1v1 game in a rolled-back txn (impersonating both players via `request.jwt.claims`) — all branches green; client builds clean; all 3 UI states render correctly (temp `/multi-rematch-preview` bypass route, snapshotted, then reverted). SW `CACHE_VERSION` → `yahdle-v3`.
 - Commit `9b9852d`.
 
+### 2026-06-06 (later) — faster turn refresh on push (c180)
+
+Rae noticed during c165 testing: with a game already open, the turn-change push arrives but the page lags before flipping to "your turn" — the realtime socket is throttled while the tab is backgrounded, so it waits on the 15s poll / a refocus. Fix: `sw.js` push handler now `postMessage({type:'REFRESH'})` to every open Yahdle client; `main.jsx` relays as a `sq:push-refresh` window event; `MultiGamePage` listens → `refresh()`. The push is the fastest signal we already have, so the open page wakes instantly. **No extra Supabase load** (same refresh the poll would do, just sooner). SW `CACHE_VERSION` → `yahdle-v4`. Commit `3de6e9a`.
+
+- **Known latent (not fixed):** `yahdle_players` has replica identity `default(pk)` but its realtime sub filters by `game_id` (non-PK) → live opponent score-pill updates may not deliver reliably; set `replica identity full` if that lag is ever felt.
+
 ### 2026-05-29 — N-player regressions fixed (c149) + smarter invite expiry (c150)
 
 Two post-ship regressions from the c136 N-player work, then a redesign of invite expiry. All shipped + verified at the data layer (live multi-account MP can't be E2E'd headlessly).
