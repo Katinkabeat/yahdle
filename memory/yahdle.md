@@ -14,6 +14,19 @@ Push-your-luck daily word-dice game
 
 ## Session log
 
+### 2026-06-06 — single-rematch accept handshake (c165) SHIPPED
+
+Replaced the unilateral rematch (both players could each fire `yahdle_rematch`, spawning two parallel games) with a one-open-request-per-game accept/decline handshake. **1v1 only**; N-player finished games (not creatable via the current lobby UI) keep the legacy unilateral `yahdle_rematch`. Built + deployed + verified at the DB layer and via a throwaway render harness; the live two-session click/flip can't be E2E'd headlessly (auth gate) so it's unverified live, but render + all RPC branches are.
+
+- **Migration `yahdle_rematch_handshake.sql`** (applied to prod via pooler psql): adds `yahdle_games.rematch_requested_by` + `rematch_new_game_id`. Three SECDEF RPCs:
+  - `yahdle_request_rematch` — `select … for update` row lock makes "first click wins" resolve server-side; rejects a second different requester ("opponent already requested"). Guards finished + 2-player + participant + not-already-accepted.
+  - `yahdle_accept_rematch` — the OTHER player only; inserts the fresh game **already `active`** (both seats + 2 turn_states + new coin flip, requester = creator seat 0), back-links `rematch_new_game_id` onto the finished game, returns the new id. Idempotent on double-accept. **No second invite/accept step.**
+  - `yahdle_decline_rematch` — either participant clears the slot; **no notification** (Rae's call). Blocked once accepted.
+- **Push:** reuses the **invite** pref bucket. Tightened the `on_yahdle_game_invited` trigger to fire only when `NEW.status='waiting'` — so the active rematch insert doesn't ping a stale "you're invited" to the requester. New edge-fn type `rematch_requested` (client fire-and-forget POST from `requestRematch`, mirrors `sendNudge`): looks up requester + the other participant, pushes "X wants a rematch!" to the recipient, tap target = the finished game (where Accept/Decline lives).
+- **Client:** `multiplayerActions.js` — new `requestRematch`/`acceptRematch`/`declineRematch` (kept legacy `rematch` for the N-player fallback). `GameOverComparison.jsx` — new `RematchControls` renders 3 states (Rematch → "requested ⏳ / Cancel" → opponent's "Accept/Decline"); falls back to the single legacy button when `max_players > 2`. `MultiGamePage.jsx` — handlers + a one-shot effect that auto-navigates the **requester** into the new game when `rematch_new_game_id` appears via realtime (the accepter navigates directly from the accept handler).
+- **Verified:** migration clean; edge fn deployed; full handshake simulated against a real finished 1v1 game in a rolled-back txn (impersonating both players via `request.jwt.claims`) — all branches green; client builds clean; all 3 UI states render correctly (temp `/multi-rematch-preview` bypass route, snapshotted, then reverted). SW `CACHE_VERSION` → `yahdle-v3`.
+- Commit `9b9852d`.
+
 ### 2026-05-29 — N-player regressions fixed (c149) + smarter invite expiry (c150)
 
 Two post-ship regressions from the c136 N-player work, then a redesign of invite expiry. All shipped + verified at the data layer (live multi-account MP can't be E2E'd headlessly).
