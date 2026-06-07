@@ -176,3 +176,6 @@ Yahdle already had decline (yahdle_decline_invite, deletes the waiting 1v1 row).
 
 ## 2026-06-06 — Claim-inactive moved to sub-header for mobile (c153)
 Yahdle already had `yahdle_claim_inactive_win` + canClaim, but the claim button was rendered inline on the opponent's-turn panel BELOW the tall scorecard — below the fold on phones, so mobile players never saw it (no responsive-hide class involved; pure layout). Moved it to the always-visible board sub-header rightSlot (next to Forfeit), shown only when canClaim; removed the inline button. No backend change. SW bumped v4→v5. Commit pushed.
+
+## 2026-06-07 — Claim + forfeit moved into the cog (c153 revision)
+Per Rae, standardized placement across all SQ games: moved BOTH claim and forfeit OUT of the sub-header and INTO the settings cog. Added a `gameRows` render-prop to lobby/SettingsDropdown.jsx (threaded through HeaderRight.jsx); MultiGamePage passes `cogGameRows`. Sub-header rightSlot is now empty. The claim row is ALWAYS shown for an active game and greyed unless it's the opponent's turn AND idle 7+ days (greying via sq-ui SQSettingsRow's new `disabled` prop). No backend change. SW bumped v5→v7. Rae verified: claim lit on a 25-day game, greyed on a fresh one, forfeit works from the cog, subheader clean.
