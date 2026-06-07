@@ -122,6 +122,32 @@ export default function HowToPlayModal({ open, onClose }) {
           </ul>
         </section>
 
+        <section>
+          <h3 className="font-display text-base mb-1">Multiplayer</h3>
+          <p className="mb-1.5">
+            Tap <b>New game</b> in the lobby to play with <b>2–4 people</b>. Drop
+            an <b>Open game</b> anyone can join, or invite <b>friends</b>. Open
+            games start once they fill and expire after 7 days if they don't.
+          </p>
+          <ul className="list-disc pl-5 space-y-1.5">
+            <li>
+              Players take turns. On your turn you roll and score exactly like
+              the daily — everyone builds their own 12-category scorecard.
+            </li>
+            <li>
+              Highest total once everyone has filled all 12 categories wins.
+            </li>
+            <li>
+              Waiting on someone? After <b>12 hours</b> a 🔔 appears so you can
+              send them a reminder (plus a push, if they have them on).
+            </li>
+            <li>
+              If a player goes inactive for <b>7 days</b>, you can claim the win
+              from the settings cog ⚙.
+            </li>
+          </ul>
+        </section>
+
       </div>
     </SQModal>
   )
