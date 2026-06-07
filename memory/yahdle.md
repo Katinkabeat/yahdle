@@ -14,6 +14,15 @@ Push-your-luck daily word-dice game
 
 ## Session log
 
+### 2026-06-07 — How-to: added a Multiplayer section (c185)
+
+`HowToPlayModal.jsx` previously had **zero** MP coverage (all solo/daily). Added a
+"Multiplayer" section at the bottom: New game in the lobby → 2–4 players, open or
+invite friends, open games expire after 7 days unfilled; players take turns and
+each build their own 12-category scorecard, highest total wins; 🔔 nudge after 12h
+idle; claim-win from the settings cog ⚙ after 7 days idle. Pure copy, no logic
+change. Committed + pushed. Part of a 4-game sweep documenting inactive-player rules.
+
 ### 2026-06-06 — single-rematch accept handshake (c165) SHIPPED
 
 Replaced the unilateral rematch (both players could each fire `yahdle_rematch`, spawning two parallel games) with a one-open-request-per-game accept/decline handshake. **1v1 only**; N-player finished games (not creatable via the current lobby UI) keep the legacy unilateral `yahdle_rematch`. Built + deployed + verified at the DB layer and via a throwaway render harness. **CONFIRMED working in Rae's live two-session test (2026-06-06):** both players saw Rematch, clicking claimed it, the opponent got Accept/Decline, Accept dropped both into a fresh game. Only blemish — ~10s before the opponent's board flipped to Accept/Decline, which is the **same realtime-propagation latency** as the turn-change lag (c181), NOT a rematch bug.
