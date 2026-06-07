@@ -458,35 +458,30 @@ export default function MultiGamePage({ session, profile, isAdmin }) {
     ? (currentPlayer.user_id === userId ? 'You' : (oppProfiles[currentPlayer.user_id]?.username ?? 'Opponent'))
     : ''
 
-  // Claim lives in the cog as an always-visible row (greyed until eligible).
-  // claimContext = it's the opponent's turn in an active human game (so claiming
-  // is conceptually possible); canClaim = they've also been idle past 7 days.
-  const claimContext = !!(
-    game && game.status === 'active' && myPlayer &&
-    myPlayer.player_index !== game.current_player_idx
-  )
+  // canClaim = it's the opponent's turn in an active game AND they've been idle
+  // past 7 days. The cog row is always shown (below) and greyed unless this holds.
   const canClaim = (() => {
-    if (!claimContext) return false
+    if (!game || game.status !== 'active' || !myPlayer) return false
+    if (myPlayer.player_index === game.current_player_idx) return false
     if (!game.last_activity_at) return false
     const age = Date.now() - new Date(game.last_activity_at).getTime()
     return age > 7 * 24 * 60 * 60 * 1000
   })()
 
   // Game-specific cog rows (Claim win / Forfeit), injected into the shared
-  // settings dropdown. Only shown for an in-play game the user hasn't left.
+  // settings dropdown. Claim is ALWAYS shown for an in-play game (so it's
+  // consistently discoverable) and greyed out unless actually claimable.
   const cogGameRows = (!isGameOver && !iForfeited && game?.status === 'active')
     ? (close) => (
         <>
-          {claimContext && (
-            <SQSettingsRow
-              label="🏆 Claim win (opponent inactive)"
-              disabled={!canClaim}
-              title={canClaim
-                ? 'Claim the win — opponent inactive 7+ days'
-                : 'Available once your opponent has been inactive for 7 days'}
-              onClick={() => { close(); handleClaim() }}
-            />
-          )}
+          <SQSettingsRow
+            label="🏆 Claim win (opponent inactive)"
+            disabled={!canClaim}
+            title={canClaim
+              ? 'Claim the win — opponent inactive 7+ days'
+              : 'Available once your opponent has been inactive for 7 days'}
+            onClick={() => { close(); handleClaim() }}
+          />
           <SQSettingsRow
             label="🏳️ Forfeit game"
             danger
