@@ -173,3 +173,6 @@ If we ever ship deterministic MP RNG, re-add a salt column (or per-turn nonces) 
 ## 2026-05-31 — Opt-in decline-notify (c172)
 
 Yahdle already had decline (yahdle_decline_invite, deletes the waiting 1v1 row). Phase 2 (yahdle_decline_notify.sql): CREATE OR REPLACE captures created_by via RETURNING before the delete, then net.http_post's an 'invite_declined' push to yahdle-push-notification edge fn, gated by the new per-game 'invite_declined' notif topic (default OFF, opt-in in hub NotificationsPanel). Edge fn handles the type via sendIfOptedIn. Verified via rolled-back impersonation test (row deleted + exactly-1-push) + live smoke test on deployed fn. Authed device-side push NOT E2E'd — Rae to confirm.
+
+## 2026-06-06 — Claim-inactive moved to sub-header for mobile (c153)
+Yahdle already had `yahdle_claim_inactive_win` + canClaim, but the claim button was rendered inline on the opponent's-turn panel BELOW the tall scorecard — below the fold on phones, so mobile players never saw it (no responsive-hide class involved; pure layout). Moved it to the always-visible board sub-header rightSlot (next to Forfeit), shown only when canClaim; removed the inline button. No backend change. SW bumped v4→v5. Commit pushed.
