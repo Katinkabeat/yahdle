@@ -1,7 +1,7 @@
 // Yahdle Service Worker — handles push notifications.
 // Bump CACHE_VERSION on every user-visible deploy so PWAs pick up the new SW.
 
-const CACHE_VERSION = 'yahdle-v5'
+const CACHE_VERSION = 'yahdle-v6'
 
 self.addEventListener('push', (event) => {
   let data = { title: 'Yahdle', body: "It's your turn!" }

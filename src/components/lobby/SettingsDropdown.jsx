@@ -16,7 +16,10 @@ import HowToPlayModal from '../HowToPlayModal.jsx'
 // `isAdmin` — when truthy, renders the "🔐 Admin panel" row that
 // navigates to /admin. Loaded once in App.jsx and threaded through
 // HeaderRight; this component shouldn't query the admins table itself.
-export default function SettingsDropdown({ isAdmin = false }) {
+// `gameRows` — optional render-prop `(close) => ReactNode` for game-specific
+// rows (e.g. Claim win / Forfeit on the board). Called with a function that
+// closes the menu, so injected rows can dismiss it after acting.
+export default function SettingsDropdown({ isAdmin = false, gameRows = null }) {
   const [open, setOpen] = useState(false)
   const [howToOpen, setHowToOpen] = useState(false)
   const ref = useRef(null)
@@ -58,7 +61,7 @@ export default function SettingsDropdown({ isAdmin = false }) {
             label="📖 How to play"
             onClick={() => { setHowToOpen(true); setOpen(false) }}
           />
-          {/* TODO add game-specific settings rows here */}
+          {gameRows && gameRows(() => setOpen(false))}
           <SQReportPlayer supabase={supabase} game="yahdle" />
           {isAdmin && (
             <SQSettingsRow

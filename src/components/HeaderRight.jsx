@@ -3,8 +3,9 @@ import SettingsDropdown from './lobby/SettingsDropdown.jsx'
 // Shared right-side header content: 🏠 home (back to SQ hub) + ⚙️ settings.
 // Used in both LobbyPage and GamePage so the chrome stays uniform.
 // `isAdmin` is forwarded to SettingsDropdown so the admin-panel row
-// only renders when appropriate.
-export default function HeaderRight({ isAdmin = false }) {
+// only renders when appropriate. `gameRows` is an optional render-prop for
+// game-specific cog rows (Claim win / Forfeit), forwarded to SettingsDropdown.
+export default function HeaderRight({ isAdmin = false, gameRows = null }) {
   return (
     <>
       <a
@@ -15,7 +16,7 @@ export default function HeaderRight({ isAdmin = false }) {
       >
         🏠
       </a>
-      <SettingsDropdown isAdmin={isAdmin} />
+      <SettingsDropdown isAdmin={isAdmin} gameRows={gameRows} />
     </>
   )
 }

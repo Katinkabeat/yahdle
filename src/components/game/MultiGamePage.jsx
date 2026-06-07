@@ -5,6 +5,7 @@ import {
   SQBoardShell,
   SQLobbyHeader,
   SQBoardHeader,
+  SQSettingsRow,
 } from '../../../../rae-side-quest/packages/sq-ui'
 import AvatarMenu from '../lobby/AvatarMenu.jsx'
 import HeaderRight from '../HeaderRight.jsx'
@@ -457,13 +458,43 @@ export default function MultiGamePage({ session, profile, isAdmin }) {
     ? (currentPlayer.user_id === userId ? 'You' : (oppProfiles[currentPlayer.user_id]?.username ?? 'Opponent'))
     : ''
 
+  // Claim lives in the cog as an always-visible row (greyed until eligible).
+  // claimContext = it's the opponent's turn in an active human game (so claiming
+  // is conceptually possible); canClaim = they've also been idle past 7 days.
+  const claimContext = !!(
+    game && game.status === 'active' && myPlayer &&
+    myPlayer.player_index !== game.current_player_idx
+  )
   const canClaim = (() => {
-    if (!game || game.status !== 'active' || !myPlayer) return false
-    if (myPlayer.player_index === game.current_player_idx) return false
+    if (!claimContext) return false
     if (!game.last_activity_at) return false
     const age = Date.now() - new Date(game.last_activity_at).getTime()
     return age > 7 * 24 * 60 * 60 * 1000
   })()
+
+  // Game-specific cog rows (Claim win / Forfeit), injected into the shared
+  // settings dropdown. Only shown for an in-play game the user hasn't left.
+  const cogGameRows = (!isGameOver && !iForfeited && game?.status === 'active')
+    ? (close) => (
+        <>
+          {claimContext && (
+            <SQSettingsRow
+              label="🏆 Claim win (opponent inactive)"
+              disabled={!canClaim}
+              title={canClaim
+                ? 'Claim the win — opponent inactive 7+ days'
+                : 'Available once your opponent has been inactive for 7 days'}
+              onClick={() => { close(); handleClaim() }}
+            />
+          )}
+          <SQSettingsRow
+            label="🏳️ Forfeit game"
+            danger
+            onClick={() => { close(); handleForfeit() }}
+          />
+        </>
+      )
+    : null
 
   return (
     <SQBoardShell
@@ -472,7 +503,7 @@ export default function MultiGamePage({ session, profile, isAdmin }) {
         <SQLobbyHeader
           title="Yahdle"
           avatarSlot={<AvatarMenu profile={profile} />}
-          rightSlot={<HeaderRight isAdmin={isAdmin} />}
+          rightSlot={<HeaderRight isAdmin={isAdmin} gameRows={cogGameRows} />}
         />
       }
       subHeader={
@@ -488,35 +519,8 @@ export default function MultiGamePage({ session, profile, isAdmin }) {
                   : ''}
             </span>
           }
-          rightSlot={
-            !isGameOver && !iForfeited && game?.status === 'active' ? (
-              <>
-                {/* Always-visible claim entry (c153). The contextual prompt
-                    on the opponent's-turn panel sits below the tall scorecard,
-                    so on mobile it's below the fold and never seen. Surfacing
-                    it here in the sub-header (same spot as Forfeit) makes it
-                    reachable without touching the board look. */}
-                {canClaim && (
-                  <button
-                    type="button"
-                    onClick={handleClaim}
-                    className="text-xs font-semibold text-amber-600 dark:text-amber-300 hover:text-amber-700 dark:hover:text-amber-200"
-                    title="Opponent inactive 7+ days — claim the win"
-                  >
-                    Claim win
-                  </button>
-                )}
-                <button
-                  type="button"
-                  onClick={handleForfeit}
-                  className="text-xs opacity-70 hover:opacity-100 hover:text-red-300"
-                  title="Forfeit this game"
-                >
-                  Forfeit
-                </button>
-              </>
-            ) : null
-          }
+          /* Claim win + Forfeit now live in the cog menu (c153 revision) so the
+             board chrome stays clean and they're identical across SQ games. */
         />
       }
     >
