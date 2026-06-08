@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import toast from 'react-hot-toast'
 import { acceptInvite, declineInvite, cancelInvite, joinOpenGame, sendNudge } from '../../lib/multiplayerActions.js'
 import CreateGameSheet from './CreateGameSheet.jsx'
+import { timeAgo } from '../../../../rae-side-quest/packages/sq-ui'
 
 const NUDGE_COOLDOWN_MS = 12 * 60 * 60 * 1000 // 12 hours
 
@@ -27,19 +28,6 @@ export default function MultiplayerCard({
   const nameFor = (id) => opponents[id]?.username ?? 'Someone'
   // My own name isn't in the opponents map — resolve it from profile.
   const displayName = (id) => (id === user?.id ? (profile?.username ?? 'You') : nameFor(id))
-
-  // "X ago" since the current turn started (last_activity_at). Matches Wordy.
-  function timeAgo(ts) {
-    if (!ts) return null
-    const diff  = Date.now() - new Date(ts).getTime()
-    const mins  = Math.floor(diff / 60000)
-    const hours = Math.floor(diff / 3600000)
-    const days  = Math.floor(diff / 86400000)
-    if (days  > 0) return `${days}d ago`
-    if (hours > 0) return `${hours}h ago`
-    if (mins  > 0) return `${mins}m ago`
-    return 'just now'
-  }
 
   // Nudge eligibility: active game, not my turn, current turn idle > 12h,
   // and no nudge in the last 12h (or already nudged this session).
@@ -250,7 +238,7 @@ export default function MultiplayerCard({
                       ({players.length}/{max})
                     </span>
                   </div>
-                  <p className="text-xs text-wordy-400 mt-0.5">{timeAgo(g.last_activity_at) ?? '🟢 In progress'}</p>
+                  <p className="text-xs text-wordy-400 mt-0.5">{timeAgo(g.last_activity_at) || '🟢 In progress'}</p>
                 </div>
                 <button
                   onClick={() => navigate(`/multi/${g.id}`)}
