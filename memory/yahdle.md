@@ -188,3 +188,6 @@ Yahdle already had `yahdle_claim_inactive_win` + canClaim, but the claim button 
 
 ## 2026-06-07 — Claim + forfeit moved into the cog (c153 revision)
 Per Rae, standardized placement across all SQ games: moved BOTH claim and forfeit OUT of the sub-header and INTO the settings cog. Added a `gameRows` render-prop to lobby/SettingsDropdown.jsx (threaded through HeaderRight.jsx); MultiGamePage passes `cogGameRows`. Sub-header rightSlot is now empty. The claim row is ALWAYS shown for an active game and greyed unless it's the opponent's turn AND idle 7+ days (greying via sq-ui SQSettingsRow's new `disabled` prop). No backend change. SW bumped v5→v7. Rae verified: claim lit on a 25-day game, greyed on a fresh one, forfeit works from the cog, subheader clean.
+
+## 2026-06-07 — timeAgo moved to shared sq-ui helper (c186)
+Deleted the inline `timeAgo` in lobby/MultiplayerCard.jsx and imported the shared `timeAgo` from rae-side-quest/packages/sq-ui. The shared helper returns "" (not null) for empty input, so the call site changed from `timeAgo(x) ?? "🟢 In progress"` to `|| "🟢 In progress"`. No visible change.
