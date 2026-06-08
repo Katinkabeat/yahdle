@@ -67,7 +67,7 @@ export default function SettingsDropdown({ isAdmin = false, gameRows = null }) {
           {isAdmin && (
             <SQSettingsRow
               label="Admin panel"
-              control="Open"
+              control="🔐 Open"
               onClick={() => { setOpen(false); navigate('/admin') }}
             />
           )}
