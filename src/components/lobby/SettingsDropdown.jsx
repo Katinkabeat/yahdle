@@ -53,6 +53,7 @@ export default function SettingsDropdown({ isAdmin = false, gameRows = null }) {
           align="right"
           className="text-sm"
         >
+          {/* Canonical SQ order: Theme → How to play → Admin → game rows → Report → Log out */}
           <SQSettingsRow
             label={isDark ? '☀️ Light mode' : '🌙 Dark mode'}
             onClick={() => { toggleTheme(); setOpen(false) }}
@@ -61,16 +62,16 @@ export default function SettingsDropdown({ isAdmin = false, gameRows = null }) {
             label="📖 How to play"
             onClick={() => { setHowToOpen(true); setOpen(false) }}
           />
-          {gameRows && gameRows(() => setOpen(false))}
-          <SQReportPlayer supabase={supabase} game="yahdle" />
           {isAdmin && (
             <SQSettingsRow
-              label="🔐 Admin panel"
+              label="Admin panel"
               onClick={() => { setOpen(false); navigate('/admin') }}
             />
           )}
+          {gameRows && gameRows(() => setOpen(false))}
+          <SQReportPlayer supabase={supabase} game="yahdle" />
           <SQSettingsRow
-            label="👋 Log out"
+            label="Log out"
             danger
             onClick={async () => {
               setOpen(false)
