@@ -13,12 +13,20 @@ export default function LobbyPage({ session, profile, isAdmin }) {
   const { pendingInvites, sentInvites, activeGames, completed, openGames, opponents, loading } = useMultiplayerLobby(user?.id)
 
   const completedGames = completed.map(g => {
-    const oppId = g.created_by === user?.id ? g.invited_user_id : g.created_by
-    const opp = opponents[oppId]
-    const myPlayer = g.yahdle_players?.find(p => p.user_id === user?.id)
-    const oppPlayer = g.yahdle_players?.find(p => p.user_id !== user?.id)
-    const oppName = opp?.username ?? 'Opponent'
-    const myName = profile?.username ?? 'You'
+    // N-player aware: read winners from yahdle_players.is_winner (set by the
+    // finalize fn for the whole top-score group), never from the singular
+    // invited_user_id — for a 3–4p game that's only the FIRST opponent, so the
+    // old code showed the wrong winner and a 1v1 scoreline. Self first, then
+    // the rest in seat order.
+    const nameFor = (p) => p.user_id === user?.id ? 'You' : (opponents[p.user_id]?.username ?? 'Player')
+    const seats = [...(g.yahdle_players ?? [])].sort((a, b) => (a.player_index ?? 0) - (b.player_index ?? 0))
+    const ordered = [
+      ...seats.filter(p => p.user_id === user?.id),
+      ...seats.filter(p => p.user_id !== user?.id),
+    ]
+    const winners = seats.filter(p => p.is_winner)
+    const winnerNames = winners.map(nameFor)
+    const iWon = winners.some(p => p.user_id === user?.id)
     let headline
     if (g.closed_reason === 'no_other_players') {
       // Expired before anyone else joined — never started, no score line.
@@ -26,21 +34,24 @@ export default function LobbyPage({ session, profile, isAdmin }) {
     } else if (g.closed_by_admin) {
       headline = '🛑 Game closed by admin'
     } else if (g.forfeit_user_id) {
-      const forfeiter = g.forfeit_user_id === user?.id ? myName : oppName
-      const winner = g.forfeit_user_id === user?.id ? oppName : myName
-      headline = `🏳️ ${forfeiter} forfeited — ${winner} wins!`
-    } else if (g.is_tie) {
-      headline = "🤝 It's a tie!"
-    } else if (g.winner_user_id === user?.id) {
-      headline = `🏆 You win!`
-    } else if (g.winner_user_id) {
-      headline = `🏆 ${oppName} wins!`
+      const quitter = seats.find(p => p.user_id === g.forfeit_user_id)
+      const quitterName = quitter ? nameFor(quitter) : 'A player'
+      headline = winnerNames.length
+        ? `🏳️ ${quitterName} forfeited — ${winnerNames.join(' & ')} win${winners.length > 1 ? '' : 's'}!`
+        : `🏳️ ${quitterName} forfeited`
+    } else if (winners.length > 1) {
+      // Top-score group shares the win (1v1 draw → both win, or N-player tie).
+      headline = `🤝 ${winnerNames.join(' & ')} tie for the win!`
+    } else if (iWon) {
+      headline = '🏆 You win!'
+    } else if (winnerNames.length) {
+      headline = `🏆 ${winnerNames[0]} wins!`
     } else {
       headline = '🏆 Game finished'
     }
     const subtitle = g.closed_reason === 'no_other_players'
       ? 'Invite expired — this game closed because no other players joined.'
-      : `You ${myPlayer?.total_score ?? 0} — ${oppName} ${oppPlayer?.total_score ?? 0}`
+      : ordered.map(p => `${nameFor(p)} ${p.total_score ?? 0}`).join(' · ')
     return { id: g.id, headline, subtitle }
   })
 
