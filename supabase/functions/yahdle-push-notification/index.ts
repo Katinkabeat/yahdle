@@ -309,10 +309,19 @@ serve(async (req: Request) => {
         let body: string
 
         if (record.forfeit_user_id === userId) {
-          body = 'You forfeited the game.'
+          if (record.end_reason === 'claim') {
+            // Claimed against while idle — NOT a voluntary forfeit.
+            body = `${winnerLabel} claimed the win because your turn was idle 7+ days.`
+          } else {
+            body = 'You forfeited the game.'
+          }
         } else if (winnerIds.has(userId)) {
           title = 'Yahdle — you won!'
-          body = tie ? 'You tied for 1st! 🏆' : 'You won! 🏆'
+          if (record.end_reason === 'forfeit' && !tie) {
+            body = `${await getUsername(supabase, record.forfeit_user_id)} forfeited, you win!`
+          } else {
+            body = tie ? 'You tied for 1st! 🏆' : 'You won! 🏆'
+          }
         } else {
           body = `${winnerLabel} won${tie ? ' (tie)' : ''}. Rematch? 🎲`
         }
