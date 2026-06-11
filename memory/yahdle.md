@@ -191,3 +191,6 @@ Per Rae, standardized placement across all SQ games: moved BOTH claim and forfei
 
 ## 2026-06-07 — timeAgo moved to shared sq-ui helper (c186)
 Deleted the inline `timeAgo` in lobby/MultiplayerCard.jsx and imported the shared `timeAgo` from rae-side-quest/packages/sq-ui. The shared helper returns "" (not null) for empty input, so the call site changed from `timeAgo(x) ?? "🟢 In progress"` to `|| "🟢 In progress"`. No visible change.
+
+## 2026-06-11 — Game-end push: end_reason + claim-mislabel fix (c188)
+Yahdle ALREADY had a full game-finished push (on_yahdle_game_finished trigger + fan-out handler honoring is_winner + closed_by_admin). Only gap: a claim-inactive-win and a voluntary forfeit were indistinguishable on the row, so a claimed-against player was told "You forfeited the game." Added `yahdle_games.end_reason` ('claim'|'forfeit'), stamped in yahdle_forfeit_game / yahdle_claim_inactive_win. No trigger change (it already posts row_to_json(NEW), which now carries end_reason). Edge fn handler refined: a forfeit_user_id recipient with end_reason='claim' now gets "<winner> claimed the win because your turn was idle 7+ days."; a single winner on a forfeit finish gets "<forfeiter> forfeited, you win!". Kept the N-player win/tie/Rematch fan-out for everything else. Migration `supabase/migrations/yahdle_gameend_reason.sql` applied via pooler; fn deployed.
