@@ -14,6 +14,19 @@ Push-your-luck daily word-dice game
 
 ## Session log
 
+### 2026-06-14 — Lobby "View today's result" (c216)
+
+`SoloPlayCard.jsx` now queries `yahdle_solo_results` for today on mount and flips the
+solo button from "▶ Play today" to "↗ View today's result" when a row exists (matches
+Rungles' lobby). No "Played today" pill (added one, Rae had it removed — the button label
+says it). Committed + pushed. Mirrors the same change in Snibble + the sq-game-starter template.
+
+**Gotcha / follow-up (Raeban c218):** Yahdle's in-game daily is still gated by **localStorage
+only** (`isGameOver` from local state in `SoloGamePage.jsx`), not server-side like Rungles.
+So cross-device: the lobby correctly shows played, but clicking in loads an empty board and a
+replay re-upserts (overwrites) today's `yahdle_solo_results` score. Low stakes; fix = server
+gate + a summary results panel (do NOT store the full scorecard server-side; Rungles only stores a summary).
+
 ### 2026-06-07 — How-to: added a Multiplayer section (c185)
 
 `HowToPlayModal.jsx` previously had **zero** MP coverage (all solo/daily). Added a
