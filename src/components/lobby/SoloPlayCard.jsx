@@ -39,14 +39,7 @@ export default function SoloPlayCard({ session }) {
           🔥 {streak}
         </span>
       )}
-      <div className="flex items-center gap-2 mb-1">
-        <h2 className="font-display text-xl">🎲 Today's Yahdle</h2>
-        {playedToday && (
-          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-wordy-200 text-wordy-700 text-xs font-bold">
-            ✓ Played today
-          </span>
-        )}
-      </div>
+      <h2 className="font-display text-xl mb-1">🎲 Today's Yahdle</h2>
       <p className="text-sm opacity-80 mb-3">
         Roll 6 letter dice, push your luck with rerolls, spell into the scorecard.
       </p>
