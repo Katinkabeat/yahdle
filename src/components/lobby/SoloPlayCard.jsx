@@ -1,4 +1,6 @@
+import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { supabase } from '../../lib/supabase.js'
 import { atlanticYMD } from '../../lib/rng.js'
 import { useStreak } from '../../hooks/useStreak.js'
 
@@ -9,6 +11,23 @@ export default function SoloPlayCard({ session }) {
   const today = atlanticYMD()
   const userId = session?.user?.id
   const { streak } = useStreak(userId)
+
+  // Reflect whether today's daily is already done, so the card offers a
+  // "view today's result" path instead of "play" (matches Rungles' lobby).
+  const [playedToday, setPlayedToday] = useState(false)
+  useEffect(() => {
+    if (!userId) return
+    let active = true
+    supabase
+      .from('yahdle_solo_results')
+      .select('play_date')
+      .eq('user_id', userId)
+      .eq('play_date', today)
+      .maybeSingle()
+      .then(({ data }) => { if (active) setPlayedToday(!!data) })
+    return () => { active = false }
+  }, [userId, today])
+
   function handlePlay() { navigate(`/solo/${today}`) }
   return (
     <section className="card relative">
@@ -20,12 +39,19 @@ export default function SoloPlayCard({ session }) {
           🔥 {streak}
         </span>
       )}
-      <h2 className="font-display text-xl mb-1">🎲 Today's Yahdle</h2>
+      <div className="flex items-center gap-2 mb-1">
+        <h2 className="font-display text-xl">🎲 Today's Yahdle</h2>
+        {playedToday && (
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-wordy-200 text-wordy-700 text-xs font-bold">
+            ✓ Played today
+          </span>
+        )}
+      </div>
       <p className="text-sm opacity-80 mb-3">
         Roll 6 letter dice, push your luck with rerolls, spell into the scorecard.
       </p>
       <button type="button" className="btn-primary" onClick={handlePlay}>
-        ▶ Play today
+        {playedToday ? '↗ View today\'s result' : '▶ Play today'}
       </button>
     </section>
   )
