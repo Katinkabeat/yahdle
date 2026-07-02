@@ -282,6 +282,10 @@ export default function SoloGamePage({ session, profile, isAdmin }) {
             <h2 className="font-display text-2xl mb-2">Done!</h2>
             <p className="text-3xl font-bold mb-1">{totalScore}</p>
             <p className="text-sm opacity-70">Come back tomorrow for a new puzzle.</p>
+            <div className="flex gap-2 justify-center mt-4">
+              <button className="btn-secondary" onClick={() => navigate('/')}>← Lobby</button>
+              <button className="btn-primary" onClick={() => navigate('/stats')}>🏆 Leaderboard</button>
+            </div>
           </div>
         )}
 
