@@ -259,7 +259,6 @@ function LeaderboardRow({ row, rank, isYou }) {
       <div className="w-9 text-center font-display text-sm">#{rank}</div>
       <div className="flex-1 min-w-0 truncate text-sm">
         <span className="font-bold">{row.username || 'anon'}</span>
-        {isYou && <span className="ml-2 text-[10px] opacity-60">← you</span>}
       </div>
       <div className="font-display text-sm">{row.score} pts</div>
     </li>
