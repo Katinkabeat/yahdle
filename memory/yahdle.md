@@ -210,3 +210,6 @@ Yahdle ALREADY had a full game-finished push (on_yahdle_game_finished trigger + 
 
 ## 2026-07-02 — End-of-daily leaderboard shortcut (c240)
 Added Lobby + Leaderboard buttons to the solo daily game-over card (`isGameOver` panel) in components/game/SoloGamePage.jsx: `btn-secondary` → `navigate('/')` (← Lobby) and `btn-primary` → `navigate('/stats')` (🏆 Leaderboard). Mirrors the pattern Oublex/Rungles already ship. `navigate` (react-router) was already in scope. Compile-verified via Vite transform (200); live end-game render not E2E'd (needs an authed full daily play). Commit a862004.
+
+## 2026-07-02 — Removed "← you" leaderboard self-marker (Rae request)
+Dropped the "← you" text label (Wordy: "(you)") from the leaderboard row in StatsPage. The `isYou`/`isMe` prop still drives the row highlight (bg-white/15 ring) — only the redundant text was removed. In-match "(you)" during live games left as-is (not a leaderboard). No Quill post (Rae's call, too small).
