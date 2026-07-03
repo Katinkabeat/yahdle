@@ -10,7 +10,7 @@ import AvatarMenu from '../lobby/AvatarMenu.jsx'
 import HeaderRight from '../HeaderRight.jsx'
 import { DICE, DIE_COUNT, ROLLS_PER_TURN } from '../../lib/dice.js'
 import { CATEGORIES, wordScore } from '../../lib/scoring.js'
-import { rngFromSeed } from '../../lib/rng.js'
+import { rngFromSeed, atlanticYMD } from '../../lib/rng.js'
 import { useDictionary } from '../../hooks/useDictionary.js'
 import { evaluateScoreAttempt } from '../../lib/scoreValidation.js'
 import { supabase } from '../../lib/supabase.js'
@@ -111,19 +111,23 @@ export default function SoloGamePage({ session, profile, isAdmin }) {
   const checkingGate = !isGameOver && serverResult === 'checking'
   const showServerPanel = !isGameOver && serverResult && serverResult !== 'checking'
 
+  // True once the puzzle's Atlantic day has passed. A game finished after
+  // its day rolled over can't be recorded — the server guard rejects any
+  // non-today play_date (past days are immutable, per c237). We surface a
+  // clear note instead of silently failing.
+  const dayClosed = gameId !== atlanticYMD()
+
   // Record the daily completion in Supabase so it counts toward the streak.
-  // gameId is the Atlantic YMD passed in via the route param.
+  // Writes go through the SECURITY DEFINER guard (yahdle_record_daily_solo):
+  // it stamps user_id from auth.uid() and rejects any non-today play_date.
   useEffect(() => {
     if (!isGameOver) return
+    if (dayClosed) return // the day rolled over; the note handles it, don't hit a guaranteed rejection
     let active = true
     const recorded = sessionStorage.getItem(`yahdle:recorded:${userId}:${gameId}`)
     if (recorded) return
     supabase
-      .from('yahdle_solo_results')
-      .upsert(
-        { user_id: userId, play_date: gameId, score: totalScore },
-        { onConflict: 'user_id,play_date' }
-      )
+      .rpc('yahdle_record_daily_solo', { p_play_date: gameId, p_score: totalScore })
       .then(({ error }) => {
         if (!active) return
         if (error) {
@@ -133,7 +137,7 @@ export default function SoloGamePage({ session, profile, isAdmin }) {
         try { sessionStorage.setItem(`yahdle:recorded:${userId}:${gameId}`, '1') } catch {}
       })
     return () => { active = false }
-  }, [isGameOver, userId, gameId, totalScore])
+  }, [isGameOver, dayClosed, userId, gameId, totalScore])
 
   const builderWord = state.builder.map(b => b.letter).join('')
   const builderScore = wordScore(builderWord)
@@ -324,9 +328,13 @@ export default function SoloGamePage({ session, profile, isAdmin }) {
 
         {isGameOver && (
           <div className="card p-4 text-center">
-            <h2 className="font-display text-2xl mb-2">Done!</h2>
+            <h2 className="font-display text-2xl mb-2">{dayClosed ? 'Day ended 🌙' : 'Done!'}</h2>
             <p className="text-3xl font-bold mb-1">{totalScore}</p>
-            <p className="text-sm opacity-70">Come back tomorrow for a new puzzle.</p>
+            <p className="text-sm opacity-70">
+              {dayClosed
+                ? "This puzzle's day ended at midnight, so it won't be recorded. Come back for today's puzzle."
+                : 'Come back tomorrow for a new puzzle.'}
+            </p>
             <div className="flex gap-2 justify-center mt-4">
               <button className="btn-secondary" onClick={() => navigate('/')}>← Lobby</button>
               <button className="btn-primary" onClick={() => navigate('/stats')}>🏆 Leaderboard</button>
