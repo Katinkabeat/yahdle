@@ -14,6 +14,7 @@ import { rngFromSeed } from '../../lib/rng.js'
 import { useDictionary } from '../../hooks/useDictionary.js'
 import { evaluateScoreAttempt } from '../../lib/scoreValidation.js'
 import { supabase } from '../../lib/supabase.js'
+import { fetchDailyResult } from '../../lib/soloResults.js'
 import Scorecard from './Scorecard.jsx'
 import WordBuilder from './WordBuilder.jsx'
 import DiceRack from './DiceRack.jsx'
@@ -88,6 +89,27 @@ export default function SoloGamePage({ session, profile, isAdmin }) {
     () => Object.values(state.scores).reduce((sum, s) => sum + s.score, 0),
     [state.scores]
   )
+
+  // Server-side re-entry gate. localStorage alone can't see a completion made
+  // on another device/browser, so a fresh local state would render a fully
+  // playable board and let the player replay (overwriting today's score).
+  // Ask the server whether this daily is already recorded; if so, and local
+  // state isn't itself complete, show a read-only results panel instead.
+  // 'checking' | null (not played) | { play_date, score }
+  const [serverResult, setServerResult] = useState('checking')
+  useEffect(() => {
+    // Local state already shows the finished game (full scorecard) — no need
+    // for the server fallback panel; and dev/no-user just plays.
+    if (isGameOver || !userId) { setServerResult(null); return }
+    let active = true
+    fetchDailyResult(userId, gameId)
+      .then(row => { if (active) setServerResult(row) })
+      .catch(() => { if (active) setServerResult(null) }) // fail open — don't lock out on a transient error
+    return () => { active = false }
+  }, [userId, gameId, isGameOver])
+
+  const checkingGate = !isGameOver && serverResult === 'checking'
+  const showServerPanel = !isGameOver && serverResult && serverResult !== 'checking'
 
   // Record the daily completion in Supabase so it counts toward the streak.
   // gameId is the Atlantic YMD passed in via the route param.
@@ -235,12 +257,35 @@ export default function SoloGamePage({ session, profile, isAdmin }) {
           onBackClick={() => navigate('/')}
           centerSlot={
             <span className="text-sm opacity-80">
-              {isGameOver ? `Final: ${totalScore}` : `Turn ${state.turn}/${TOTAL_TURNS} • ${totalScore} pts`}
+              {showServerPanel
+                ? `Final: ${serverResult.score}`
+                : isGameOver
+                  ? `Final: ${totalScore}`
+                  : `Turn ${state.turn}/${TOTAL_TURNS} • ${totalScore} pts`}
             </span>
           }
         />
       }
     >
+      {checkingGate && (
+        <div className="py-8 text-center text-sm opacity-70">Checking today's result…</div>
+      )}
+
+      {showServerPanel && (
+        <div className="py-2 px-2">
+          <div className="card p-4 text-center">
+            <h2 className="font-display text-2xl mb-2">Already played today</h2>
+            <p className="text-3xl font-bold mb-1">{serverResult.score}</p>
+            <p className="text-sm opacity-70">You finished today's puzzle on another device. Come back tomorrow for a new one.</p>
+            <div className="flex gap-2 justify-center mt-4">
+              <button className="btn-secondary" onClick={() => navigate('/')}>← Lobby</button>
+              <button className="btn-primary" onClick={() => navigate('/stats')}>🏆 Leaderboard</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {!checkingGate && !showServerPanel && (
       <div className="py-2 px-2 space-y-2">
 
         <Scorecard
@@ -290,6 +335,7 @@ export default function SoloGamePage({ session, profile, isAdmin }) {
         )}
 
       </div>
+      )}
     </SQBoardShell>
   )
 }
