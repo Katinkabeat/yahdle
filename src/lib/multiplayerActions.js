@@ -106,15 +106,32 @@ export async function claimInactiveWin(gameId) {
 export async function sendNudge(gameId, nudgerName) {
   const { error } = await supabase.rpc('yahdle_nudge', { p_game_id: gameId })
   if (error) throw error
-  fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/yahdle-push-notification`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
-      'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY,
-    },
-    body: JSON.stringify({ type: 'nudge', game_id: gameId, nudger_name: nudgerName }),
-  }).catch(() => {})
+  // The push IS the nudge, so (unlike the fire-and-forget pings below) we
+  // await it and report failure — otherwise the nudger gets a false "sent"
+  // toast when delivery silently dropped (c239). 8s cap so a hung edge fn
+  // can't spin the nudge button forever.
+  const ctrl = new AbortController()
+  const timer = setTimeout(() => ctrl.abort(), 8000)
+  let ok = false
+  try {
+    const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/yahdle-push-notification`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
+        'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY,
+      },
+      body: JSON.stringify({ type: 'nudge', game_id: gameId, nudger_name: nudgerName }),
+      signal: ctrl.signal,
+    })
+    ok = res.ok
+    if (!ok) console.warn(`[nudge] push failed: HTTP ${res.status}`)
+  } catch (err) {
+    console.warn('[nudge] push error:', err?.name === 'AbortError' ? 'timeout' : err)
+  } finally {
+    clearTimeout(timer)
+  }
+  if (!ok) throw new Error("Couldn't send the reminder")
 }
 
 // Legacy unilateral rematch — still used as the fallback for N-player
