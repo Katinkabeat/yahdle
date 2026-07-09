@@ -120,23 +120,40 @@ export default function SoloGamePage({ session, profile, isAdmin }) {
   // Record the daily completion in Supabase so it counts toward the streak.
   // Writes go through the SECURITY DEFINER guard (yahdle_record_daily_solo):
   // it stamps user_id from auth.uid() and rejects any non-today play_date.
+  //
+  // NOT fire-and-forget: a swallowed failure silently drops the daily score +
+  // streak credit and the game-over panel would still read "Done!". The common
+  // failure is a stale/expired token after a backgrounded mobile tab (→ 401),
+  // so on failure we refreshSession() and retry, then surface a retry button.
+  const [recordState, setRecordState] = useState('idle') // idle | saving | error | saved
+
+  async function recordDaily() {
+    if (!userId) return
+    const flagKey = `yahdle:recorded:${userId}:${gameId}`
+    setRecordState('saving')
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const { error } = await supabase.rpc('yahdle_record_daily_solo', {
+        p_play_date: gameId, p_score: totalScore,
+      })
+      if (!error) {
+        try { sessionStorage.setItem(flagKey, '1') } catch {}
+        setRecordState('saved')
+        return
+      }
+      console.error(`[yahdle] failed to record solo result (attempt ${attempt + 1})`, error)
+      await supabase.auth.refreshSession().catch(() => {})
+      await new Promise(r => setTimeout(r, 400 * (attempt + 1)))
+    }
+    setRecordState('error')
+  }
+
   useEffect(() => {
     if (!isGameOver) return
     if (dayClosed) return // the day rolled over; the note handles it, don't hit a guaranteed rejection
-    let active = true
-    const recorded = sessionStorage.getItem(`yahdle:recorded:${userId}:${gameId}`)
-    if (recorded) return
-    supabase
-      .rpc('yahdle_record_daily_solo', { p_play_date: gameId, p_score: totalScore })
-      .then(({ error }) => {
-        if (!active) return
-        if (error) {
-          console.error('[yahdle] failed to record solo result', error)
-          return
-        }
-        try { sessionStorage.setItem(`yahdle:recorded:${userId}:${gameId}`, '1') } catch {}
-      })
-    return () => { active = false }
+    if (!userId) return
+    if (sessionStorage.getItem(`yahdle:recorded:${userId}:${gameId}`)) { setRecordState('saved'); return }
+    recordDaily()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isGameOver, dayClosed, userId, gameId, totalScore])
 
   const builderWord = state.builder.map(b => b.letter).join('')
@@ -335,6 +352,7 @@ export default function SoloGamePage({ session, profile, isAdmin }) {
                 ? "This puzzle's day ended at midnight, so it won't be recorded. Come back for today's puzzle."
                 : 'Come back tomorrow for a new puzzle.'}
             </p>
+            {!dayClosed && <SaveStatus recordState={recordState} onRetry={recordDaily} />}
             <div className="flex gap-2 justify-center mt-4">
               <button className="btn-secondary" onClick={() => navigate('/')}>← Lobby</button>
               <button className="btn-primary" onClick={() => navigate('/stats')}>🏆 Leaderboard</button>
@@ -346,4 +364,22 @@ export default function SoloGamePage({ session, profile, isAdmin }) {
       )}
     </SQBoardShell>
   )
+}
+
+// Reflect the real save state of the daily result so a failed write isn't
+// hidden behind a "Done!" panel. On a hard failure (after refresh+retry) the
+// player gets a retry instead of silently losing the score + streak credit.
+function SaveStatus({ recordState, onRetry }) {
+  if (recordState === 'error') {
+    return (
+      <div className="mt-3">
+        <p className="text-sm font-semibold text-rose-500">Couldn't save your score.</p>
+        <button className="btn-primary mt-2" onClick={onRetry}>Retry saving</button>
+      </div>
+    )
+  }
+  if (recordState === 'saving') {
+    return <p className="text-xs opacity-60 mt-2">Saving your score…</p>
+  }
+  return null
 }
