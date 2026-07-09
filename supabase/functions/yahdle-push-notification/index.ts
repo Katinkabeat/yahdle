@@ -358,8 +358,9 @@ serve(async (req: Request) => {
     }
 
     // ── nudge: client POST, remind the current player it's their turn ──
-    // The yahdle_nudge RPC has already validated eligibility + stamped the
-    // cooldown; we just look up who to ping and send.
+    // The yahdle_nudge RPC has already validated eligibility; we just look up
+    // who to ping and send. The client stamps the cooldown (yahdle_mark_nudged)
+    // only after this succeeds, so a failed send doesn't lock the game.
     if (payload.type === 'nudge') {
       const { game_id, nudger_name } = payload
       const { data: game } = await supabase

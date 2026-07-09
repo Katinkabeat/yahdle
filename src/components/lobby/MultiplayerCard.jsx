@@ -1,7 +1,7 @@
-import { Fragment, useState } from 'react'
+import { Fragment, useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import toast from 'react-hot-toast'
-import { acceptInvite, declineInvite, cancelInvite, joinOpenGame, sendNudge } from '../../lib/multiplayerActions.js'
+import { acceptInvite, declineInvite, cancelInvite, joinOpenGame, sendNudge, isNudgeEnabled } from '../../lib/multiplayerActions.js'
 import CreateGameSheet from './CreateGameSheet.jsx'
 import { timeAgo } from '../../../../rae-side-quest/packages/sq-ui'
 
@@ -24,14 +24,20 @@ export default function MultiplayerCard({
   const [sheetOpen, setSheetOpen] = useState(false)
   const [nudgingId, setNudgingId] = useState(null)
   const [nudgedIds, setNudgedIds] = useState(() => new Set())
+  // current-player user_id -> whether they have nudge notifications on.
+  const [nudgePrefs, setNudgePrefs] = useState(() => new Map())
 
   const nameFor = (id) => opponents[id]?.username ?? 'Someone'
   // My own name isn't in the opponents map — resolve it from profile.
   const displayName = (id) => (id === user?.id ? (profile?.username ?? 'You') : nameFor(id))
 
-  // Nudge eligibility: active game, not my turn, current turn idle > 12h,
-  // and no nudge in the last 12h (or already nudged this session).
-  function canNudge(g) {
+  const currentPlayerId = (g) =>
+    g.yahdle_players?.find(p => p.player_index === g.current_player_idx)?.user_id
+
+  // Everything that qualifies a game for a nudge EXCEPT the opponent's opt-in:
+  // active game, not my turn, current turn idle > 12h, no nudge in the last 12h
+  // (or already nudged this session).
+  function nudgeEligible(g) {
     const me = g.yahdle_players?.find(p => p.user_id === user?.id)
     if (!me || g.status !== 'active') return false
     if (me.player_index === g.current_player_idx) return false
@@ -40,6 +46,29 @@ export default function MultiplayerCard({
     const nudgeAge = g.last_nudged_at   ? now - new Date(g.last_nudged_at).getTime()   : Infinity
     return turnAge > NUDGE_COOLDOWN_MS && nudgeAge > NUDGE_COOLDOWN_MS && !nudgedIds.has(g.id)
   }
+
+  // Show the bell only if the opponent can actually receive it. Bell stays
+  // hidden until their pref loads; reappears if they turn nudges back on
+  // (prefs are re-fetched whenever the games list refreshes).
+  function canNudge(g) {
+    if (!nudgeEligible(g)) return false
+    return nudgePrefs.get(currentPlayerId(g)) === true
+  }
+
+  // Fetch the nudge opt-in for the current player of every otherwise-eligible
+  // game, so we know whether to show the bell. Re-runs when the games list
+  // changes; a fresh Map each pass keeps it correct in both directions.
+  useEffect(() => {
+    const ids = [...new Set(
+      activeGames.filter(nudgeEligible).map(currentPlayerId).filter(Boolean)
+    )]
+    if (ids.length === 0) { setNudgePrefs(new Map()); return }
+    let cancelled = false
+    Promise.all(ids.map(async (id) => [id, await isNudgeEnabled(id)]))
+      .then((entries) => { if (!cancelled) setNudgePrefs(new Map(entries)) })
+    return () => { cancelled = true }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeGames, user?.id])
 
   async function handleNudge(e, g) {
     e.stopPropagation()

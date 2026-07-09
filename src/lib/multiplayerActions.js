@@ -131,7 +131,24 @@ export async function sendNudge(gameId, nudgerName) {
   } finally {
     clearTimeout(timer)
   }
-  if (!ok) throw new Error("Couldn't send the reminder")
+  if (!ok) throw new Error("Couldn't reach them just now — try again in a bit.")
+  // Start the 12h cooldown only now that the push actually landed. yahdle_nudge
+  // no longer stamps up-front, so a failed send above never locks the game.
+  await supabase.rpc('yahdle_mark_nudged', { p_game_id: gameId }).catch(() => {})
+}
+
+// Whether a user has Yahdle nudge notifications turned on. Used to hide the
+// nudge bell for opponents who've opted out — no point offering an action that
+// won't deliver. Mirrors the server's sendIfOptedIn('yahdle','nudge') gate, so
+// the bell shows exactly when a nudge would actually get through. Fail-open
+// (returns true on RPC error) to match the server.
+export async function isNudgeEnabled(userId) {
+  if (!userId) return false
+  const { data, error } = await supabase.rpc('sq_notification_enabled', {
+    p_user_id: userId, p_app: 'yahdle', p_topic: 'nudge',
+  })
+  if (error) return true
+  return data !== false
 }
 
 // Legacy unilateral rematch — still used as the fallback for N-player
