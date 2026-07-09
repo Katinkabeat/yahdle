@@ -14,6 +14,7 @@ export function useMultiplayerLobby(userId) {
   const [pendingInvites, setPendingInvites] = useState([])
   const [sentInvites, setSentInvites] = useState([])
   const [pendingRematches, setPendingRematches] = useState([])
+  const [incomingRematches, setIncomingRematches] = useState([])
   const [activeGames, setActiveGames] = useState([])
   const [completed, setCompleted] = useState([])
   const [openGames, setOpenGames] = useState([])
@@ -81,8 +82,18 @@ export function useMultiplayerLobby(userId) {
       const isMyPendingRematch = g =>
         g.status === 'finished' && g.rematch_requested_by === userId && !g.rematch_new_game_id
       const rematches = list.filter(isMyPendingRematch)
+      // The mirror of the above: a rematch my OPPONENT requested that I haven't
+      // accepted yet. The accept/decline UI otherwise lives only on the finished
+      // game's game-over screen — once I'm back in the lobby I had nowhere to
+      // act on it. Surface it like a pending invite (Accept / Decline). 1v1 only
+      // (the handshake RPCs reject N-player games).
+      const isIncomingRematch = g =>
+        g.status === 'finished' && !g.rematch_new_game_id &&
+        g.rematch_requested_by && g.rematch_requested_by !== userId &&
+        (g.yahdle_players ?? []).some(p => p.user_id === userId)
+      const incoming = list.filter(isIncomingRematch)
       const finished = list
-        .filter(g => g.status === 'finished' && !isMyPendingRematch(g))
+        .filter(g => g.status === 'finished' && !isMyPendingRematch(g) && !isIncomingRematch(g))
         .slice(0, 10)
       const openList = open ?? []
 
@@ -109,6 +120,7 @@ export function useMultiplayerLobby(userId) {
       setPendingInvites(pending)
       setSentInvites(sent)
       setPendingRematches(rematches)
+      setIncomingRematches(incoming)
       setActiveGames(active)
       setCompleted(finished)
       setOpenGames(openList)
@@ -135,5 +147,5 @@ export function useMultiplayerLobby(userId) {
     enabled: !!userId,
   })
 
-  return { pendingInvites, sentInvites, pendingRematches, activeGames, completed, openGames, opponents, loading, reload }
+  return { pendingInvites, sentInvites, pendingRematches, incomingRematches, activeGames, completed, openGames, opponents, loading, reload }
 }

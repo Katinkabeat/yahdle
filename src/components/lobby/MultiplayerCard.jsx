@@ -1,7 +1,7 @@
 import { Fragment, useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import toast from 'react-hot-toast'
-import { acceptInvite, declineInvite, cancelInvite, joinOpenGame, sendNudge, isNudgeEnabled, declineRematch } from '../../lib/multiplayerActions.js'
+import { acceptInvite, declineInvite, cancelInvite, joinOpenGame, sendNudge, isNudgeEnabled, acceptRematch, declineRematch } from '../../lib/multiplayerActions.js'
 import CreateGameSheet from './CreateGameSheet.jsx'
 import { timeAgo } from '../../../../rae-side-quest/packages/sq-ui'
 
@@ -16,6 +16,7 @@ export default function MultiplayerCard({
   pendingInvites = [],
   sentInvites = [],
   pendingRematches = [],
+  incomingRematches = [],
   activeGames = [],
   openGames = [],
   opponents = {},
@@ -129,6 +130,25 @@ export default function MultiplayerCard({
     }
   }
 
+  async function handleAcceptRematch(gameId) {
+    try {
+      const newId = await acceptRematch(gameId)
+      toast.success('Game on!')
+      navigate(`/multi/${newId}`)
+    } catch (err) {
+      toast.error(err.message || 'Failed to accept')
+    }
+  }
+
+  async function handleDeclineRematch(gameId) {
+    if (!confirm('Decline this rematch?')) return
+    try {
+      await declineRematch(gameId)
+    } catch (err) {
+      toast.error(err.message || 'Failed to decline')
+    }
+  }
+
   // The opponent in a finished 1v1 game (for the "waiting on them" label).
   const opponentName = (g) => {
     const opp = (g.yahdle_players ?? []).find(p => p.user_id !== user?.id)
@@ -162,7 +182,7 @@ export default function MultiplayerCard({
 
         {loading && <p className="text-sm opacity-60 text-center py-2">Loading…</p>}
 
-        {(pendingInvites.length === 0 && sentInvites.length === 0 && pendingRematches.length === 0 && activeGames.length === 0 && openGames.length === 0 && !loading) && (
+        {(pendingInvites.length === 0 && sentInvites.length === 0 && pendingRematches.length === 0 && incomingRematches.length === 0 && activeGames.length === 0 && openGames.length === 0 && !loading) && (
           <p className="text-sm text-wordy-400 text-center py-2">
             No active games — start an open game or invite a friend.
           </p>
@@ -198,6 +218,33 @@ export default function MultiplayerCard({
               </div>
             )
           })}
+
+          {incomingRematches.map(g => (
+            <div
+              key={g.id}
+              className="flex items-center justify-between rounded-xl px-3 py-2 border bg-wordy-50 border-wordy-100 dark:bg-[#1a1130] dark:border-[#2d1b55]"
+            >
+              <div className="min-w-0">
+                <div className="text-sm font-semibold truncate">🎲 {opponentName(g)} wants a rematch!</div>
+                <p className="text-xs text-wordy-400 mt-0.5">🔁 tap to accept and play again</p>
+              </div>
+              <div className="flex gap-1.5 shrink-0">
+                <button
+                  onClick={() => handleAcceptRematch(g.id)}
+                  className="text-xs px-3 py-1.5 rounded-lg font-bold btn-primary bg-amber-500 hover:bg-amber-600"
+                >
+                  Accept
+                </button>
+                <button
+                  onClick={() => handleDeclineRematch(g.id)}
+                  className="w-7 h-7 grid place-items-center rounded-full text-wordy-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40"
+                  aria-label="Decline rematch"
+                >
+                  ×
+                </button>
+              </div>
+            </div>
+          ))}
 
           {sentInvites.map(g => {
             const iAmCreator = g.created_by === user?.id
