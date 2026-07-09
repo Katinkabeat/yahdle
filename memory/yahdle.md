@@ -14,6 +14,21 @@ Push-your-luck daily word-dice game
 
 ## Session log
 
+### 2026-07-09 — Nudge fixes (c248) + rematch pending row (c251)
+
+Two of four SQ bugs Rae reported this session landed in Yahdle.
+
+**Nudge (c248, commit `9cfca30`):**
+- **Cooldown-on-success.** `yahdle_nudge` no longer stamps `last_nudged_at`; a new `yahdle_mark_nudged` RPC does, and the client calls it ONLY after the push POST returns ok (migration `yahdle_nudge_cooldown_on_success.sql`). Fixes the c239 residual where a failed push 12h-locked the game and retries hit "Already nudged recently."
+- **Bell hidden for opted-out opponents.** `MultiplayerCard` gates the 🔔 on `isNudgeEnabled(currentPlayerId)` → `sq_notification_enabled(uid,'yahdle','nudge')` (same gate the edge fn uses). Reappears when they re-enable (prefs refetched per lobby reload). Fetched only for otherwise-eligible games (idle >12h, not my turn) to limit RPC fan-out.
+- Friendlier failure copy; SW cache → yahdle-v10.
+
+**Rematch pending row (c251, commit `64c219e`):**
+- `useMultiplayerLobby` now emits `pendingRematches` = finished games where `rematch_requested_by == me && rematch_new_game_id is null`, excluded from `completed`. `MultiplayerCard` renders them like a sent-invite ("🔁 Rematch sent · ⏳ waiting for [opponent]") with a ✕ → `declineRematch`. Pure client. SW cache → yahdle-v11.
+- Why display-only, not a real waiting game: keeps the c165 lightweight-flag handshake (a real waiting game would need invite-expiry cleanup). Rae's explicit call.
+
+Both: build clean + app mounts; authed lobby render is the click-test boundary (SQ authed-verify limit). Data layer verified via rolled-back txns against Rae's real account.
+
 ### 2026-06-14 — Lobby "View today's result" (c216)
 
 `SoloPlayCard.jsx` now queries `yahdle_solo_results` for today on mount and flips the

@@ -67,6 +67,7 @@ export default function MultiplayerCard({
     let cancelled = false
     Promise.all(ids.map(async (id) => [id, await isNudgeEnabled(id)]))
       .then((entries) => { if (!cancelled) setNudgePrefs(new Map(entries)) })
+      .catch(() => {})
     return () => { cancelled = true }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeGames, user?.id])

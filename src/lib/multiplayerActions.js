@@ -144,11 +144,17 @@ export async function sendNudge(gameId, nudgerName) {
 // (returns true on RPC error) to match the server.
 export async function isNudgeEnabled(userId) {
   if (!userId) return false
-  const { data, error } = await supabase.rpc('sq_notification_enabled', {
-    p_user_id: userId, p_app: 'yahdle', p_topic: 'nudge',
-  })
-  if (error) return true
-  return data !== false
+  try {
+    const { data, error } = await supabase.rpc('sq_notification_enabled', {
+      p_user_id: userId, p_app: 'yahdle', p_topic: 'nudge',
+    })
+    if (error) return true
+    return data !== false
+  } catch {
+    // Fail-open on a network/transport error — never let a lobby-side pref
+    // check throw into the caller (would reject the Promise.all in the card).
+    return true
+  }
 }
 
 // Legacy unilateral rematch — still used as the fallback for N-player
