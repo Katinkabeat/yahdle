@@ -27,7 +27,11 @@ Two of four SQ bugs Rae reported this session landed in Yahdle.
 - `useMultiplayerLobby` now emits `pendingRematches` = finished games where `rematch_requested_by == me && rematch_new_game_id is null`, excluded from `completed`. `MultiplayerCard` renders them like a sent-invite ("🔁 Rematch sent · ⏳ waiting for [opponent]") with a ✕ → `declineRematch`. Pure client. SW cache → yahdle-v11.
 - Why display-only, not a real waiting game: keeps the c165 lightweight-flag handshake (a real waiting game would need invite-expiry cleanup). Rae's explicit call.
 
-Both: build clean + app mounts; authed lobby render is the click-test boundary (SQ authed-verify limit). Data layer verified via rolled-back txns against Rae's real account.
+**Incoming rematch row (c252, commit `5efd6d8`):**
+- The mirror of c251's sender row. Before this, the recipient could ONLY accept/decline a rematch from the finished game's game-over screen (`RematchControls` in `GameOverComparison`) — once back in the lobby there was no surface, so a requested rematch looked ignorable. `useMultiplayerLobby` now also emits `incomingRematches` = finished 1v1 games where `rematch_requested_by` is set, isn't me, no `rematch_new_game_id`, and I'm a seated player; excluded from `completed` and `pendingRematches`. `MultiplayerCard` renders them near the top (actionable) like a pending invite: "🎲 {opp} wants a rematch!" + Accept (`acceptRematch` → navigate to new game) / × Decline (`declineRematch`). Pure client, no DB change (handshake RPCs already existed). SW cache → yahdle-v12.
+- Live-update note: UPDATE to the finished game fires the recipient's lobby realtime only if they're `created_by`/`invited_user_id` on it (open-game joiners fall back to the 30s poll) — same asymmetry the sender row already had.
+
+All three: build clean + app mounts; authed lobby render is the click-test boundary (SQ authed-verify limit). Data layer verified via rolled-back txns against Rae's real account.
 
 ### 2026-06-14 — Lobby "View today's result" (c216)
 
