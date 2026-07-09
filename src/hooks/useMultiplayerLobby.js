@@ -13,6 +13,7 @@ import { useRealtimeChannel } from './useRealtimeChannel.js'
 export function useMultiplayerLobby(userId) {
   const [pendingInvites, setPendingInvites] = useState([])
   const [sentInvites, setSentInvites] = useState([])
+  const [pendingRematches, setPendingRematches] = useState([])
   const [activeGames, setActiveGames] = useState([])
   const [completed, setCompleted] = useState([])
   const [openGames, setOpenGames] = useState([])
@@ -73,7 +74,16 @@ export function useMultiplayerLobby(userId) {
       // it fills (creator still saw it via created_by).
       const sent    = list.filter(g => g.status === 'waiting' && amPlayer(g))
       const active = list.filter(g => g.status === 'active')
-      const finished = list.filter(g => g.status === 'finished').slice(0, 10)
+      // A rematch I've requested but my opponent hasn't accepted yet: a
+      // finished game flagged with my request and no new game spawned. Surface
+      // it like a sent invite ("waiting on them") rather than buried in the
+      // completed list.
+      const isMyPendingRematch = g =>
+        g.status === 'finished' && g.rematch_requested_by === userId && !g.rematch_new_game_id
+      const rematches = list.filter(isMyPendingRematch)
+      const finished = list
+        .filter(g => g.status === 'finished' && !isMyPendingRematch(g))
+        .slice(0, 10)
       const openList = open ?? []
 
       // Collect opponent ids for profile lookup. Open-games creator
@@ -98,6 +108,7 @@ export function useMultiplayerLobby(userId) {
 
       setPendingInvites(pending)
       setSentInvites(sent)
+      setPendingRematches(rematches)
       setActiveGames(active)
       setCompleted(finished)
       setOpenGames(openList)
@@ -124,5 +135,5 @@ export function useMultiplayerLobby(userId) {
     enabled: !!userId,
   })
 
-  return { pendingInvites, sentInvites, activeGames, completed, openGames, opponents, loading, reload }
+  return { pendingInvites, sentInvites, pendingRematches, activeGames, completed, openGames, opponents, loading, reload }
 }

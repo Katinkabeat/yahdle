@@ -11,7 +11,7 @@ import { buildCompletedRow } from '../../lib/completedBanner.js'
 export default function LobbyPage({ session, profile, isAdmin }) {
   const navigate = useNavigate()
   const user = session?.user
-  const { pendingInvites, sentInvites, activeGames, completed, openGames, opponents, loading } = useMultiplayerLobby(user?.id)
+  const { pendingInvites, sentInvites, pendingRematches, activeGames, completed, openGames, opponents, loading } = useMultiplayerLobby(user?.id)
 
   const completedGames = completed.map(g => buildCompletedRow(g, user?.id, opponents))
 
@@ -31,6 +31,7 @@ export default function LobbyPage({ session, profile, isAdmin }) {
         profile={profile}
         pendingInvites={pendingInvites}
         sentInvites={sentInvites}
+        pendingRematches={pendingRematches}
         activeGames={activeGames}
         openGames={openGames}
         opponents={opponents}

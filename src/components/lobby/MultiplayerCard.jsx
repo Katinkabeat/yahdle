@@ -1,7 +1,7 @@
 import { Fragment, useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import toast from 'react-hot-toast'
-import { acceptInvite, declineInvite, cancelInvite, joinOpenGame, sendNudge, isNudgeEnabled } from '../../lib/multiplayerActions.js'
+import { acceptInvite, declineInvite, cancelInvite, joinOpenGame, sendNudge, isNudgeEnabled, declineRematch } from '../../lib/multiplayerActions.js'
 import CreateGameSheet from './CreateGameSheet.jsx'
 import { timeAgo } from '../../../../rae-side-quest/packages/sq-ui'
 
@@ -15,6 +15,7 @@ export default function MultiplayerCard({
   profile,
   pendingInvites = [],
   sentInvites = [],
+  pendingRematches = [],
   activeGames = [],
   openGames = [],
   opponents = {},
@@ -118,6 +119,21 @@ export default function MultiplayerCard({
     }
   }
 
+  async function handleCancelRematch(gameId) {
+    if (!confirm('Cancel this rematch request?')) return
+    try {
+      await declineRematch(gameId)
+    } catch (err) {
+      toast.error(err.message || 'Failed to cancel')
+    }
+  }
+
+  // The opponent in a finished 1v1 game (for the "waiting on them" label).
+  const opponentName = (g) => {
+    const opp = (g.yahdle_players ?? []).find(p => p.user_id !== user?.id)
+    return opp ? nameFor(opp.user_id) : 'your opponent'
+  }
+
   async function handleJoinOpen(gameId) {
     try {
       await joinOpenGame(gameId)
@@ -145,7 +161,7 @@ export default function MultiplayerCard({
 
         {loading && <p className="text-sm opacity-60 text-center py-2">Loading…</p>}
 
-        {(pendingInvites.length === 0 && sentInvites.length === 0 && activeGames.length === 0 && openGames.length === 0 && !loading) && (
+        {(pendingInvites.length === 0 && sentInvites.length === 0 && pendingRematches.length === 0 && activeGames.length === 0 && openGames.length === 0 && !loading) && (
           <p className="text-sm text-wordy-400 text-center py-2">
             No active games — start an open game or invite a friend.
           </p>
@@ -221,6 +237,25 @@ export default function MultiplayerCard({
               </div>
             )
           })}
+
+          {pendingRematches.map(g => (
+            <div
+              key={g.id}
+              className="flex items-center justify-between rounded-xl px-3 py-2 border bg-wordy-50 border-wordy-100 dark:bg-[#1a1130] dark:border-[#2d1b55]"
+            >
+              <div className="min-w-0">
+                <div className="text-sm font-semibold truncate">🔁 Rematch sent</div>
+                <p className="text-xs text-wordy-400 mt-0.5">⏳ waiting for {opponentName(g)}</p>
+              </div>
+              <button
+                onClick={() => handleCancelRematch(g.id)}
+                className="w-7 h-7 grid place-items-center rounded-full text-wordy-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 shrink-0"
+                aria-label="Cancel rematch"
+              >
+                ×
+              </button>
+            </div>
+          ))}
 
           {activeGames.map(g => {
             const players = (g.yahdle_players ?? []).slice().sort((a, b) => a.player_index - b.player_index)
