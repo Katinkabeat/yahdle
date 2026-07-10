@@ -6,6 +6,7 @@ import {
   postNudge,
   nudgeFailureMessage,
 } from '../../../rae-side-quest/packages/sq-ui/utils/nudge.js'
+import { firePushAndReport } from '../../../rae-side-quest/packages/sq-ui/utils/report.js'
 
 // Thin wrappers around the Yahdle multiplayer RPCs. All game state
 // mutations go server-side (SECDEF) — this file just relays.
@@ -154,15 +155,16 @@ export async function rematch(prevGameId) {
 export async function requestRematch(prevGameId) {
   const { error } = await supabase.rpc('yahdle_request_rematch', { p_game_id: prevGameId })
   if (error) throw error
-  fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/yahdle-push-notification`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
-      'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY,
-    },
-    body: JSON.stringify({ type: 'rematch_requested', game_id: prevGameId }),
-  }).catch(() => {})
+  // Fire-and-forget notify of the rematch request. The request already succeeded
+  // (RPC above), so we don't block or toast — but a swallowed push failure is
+  // reported to #error-log (c262/c265) rather than vanishing into a bare .catch().
+  void firePushAndReport({
+    pushUrl: `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/yahdle-push-notification`,
+    reportUrl: `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/sq-report-client-error`,
+    anonKey: import.meta.env.VITE_SUPABASE_ANON_KEY,
+    body: { type: 'rematch_requested', game_id: prevGameId },
+    game: 'yahdle', type: 'rematch_requested', detail: `game_id=${prevGameId}`,
+  })
 }
 
 export async function acceptRematch(prevGameId) {
