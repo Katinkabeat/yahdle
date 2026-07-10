@@ -274,3 +274,19 @@ Rae nudged her Yahdle test game: **got an error toast, but the push arrived.** T
 **Verified:** the RPC itself was never the problem — `yahdle_mark_nudged` exists, is SECURITY DEFINER, and `has_function_privilege('authenticated', …, 'EXECUTE')` is true. Proved old-vs-new line shape at runtime: old throws `TypeError`, new surfaces the error as a value and cannot throw. Build clean.
 
 **Class of bug — check this on every new supabase call:** grepped `.rpc(...)/.from(...)` chained to `.catch(` across wordy/rungles/snibble/yahdle/oublex/rae-side-quest — **this was the only occurrence.** `.then()` works, `.catch()`/`.finally()` do not. Use `const { data, error } = await …` or wrap in `Promise.resolve()`.
+
+## 2026-07-10 — Nudge bell gated on the opponent's opt-in + toast now reads `sent` (c259)
+Generalised c248 (which shipped Yahdle-only) to all four games, and closed the hole c260 left open.
+
+**Two changes, one invariant: never claim a nudge was sent unless a notification was actually delivered.**
+1. **Bell gate.** The 🔔 only renders when the recipient has that game's `nudge` topic enabled (`sq_notification_enabled(uid, app, 'nudge')`). Fail-open: an RPC/transport error returns `true`, so a hiccup in a courtesy check never hides a bell that would have worked (the server re-checks the same pref anyway).
+2. **Delivery check.** The push edge functions answer **HTTP 200** with `{sent:false, reason:'opted out'|'no push subscription'}` or `{skipped:'…'}`. `res.ok` therefore proves *nothing*. All four call sites now read the body and treat `sent !== true` as a failure. An unparseable 200 counts as delivered (fail-open — a false "couldn't send" on a nudge that landed is worse).
+
+`no push subscription` is the common case, not `opted out`: a player with the pref ON who never granted browser permission. The bell gate does NOT catch that one — only the `sent` read does.
+
+**Shared helper.** `rae-side-quest/packages/sq-ui/utils/nudge.js` — `isNudgeEnabled(supabase, userId, app)`, `postNudge({url, anonKey, body})` → `{delivered, reason, status}`, `nudgeFailureMessage(reason)`. sq-ui carries no deps, so the **caller passes its own supabase client**. Non-React lib files import `utils/nudge.js` directly (not the package index) so they don't drag the JSX components into their chunk. Games consume sq-ui by relative path, so no install step.
+
+Failure copy never names the recipient's notification settings — "They're not set up to get reminders right now." Their prefs are their business, not the nudger's.
+
+**Verified:** probed the four *live* edge fns with a bogus game id — all returned **200 + `{skipped}`**, i.e. the old `res.ok` code would have toasted "Reminder sent!" for a nudge that never left the server. Stubbed the remaining body shapes (`sent:true`, both `sent:false` reasons, 404, unparseable, network error) — all classify correctly. Gate proven at the data layer in a rolled-back txn against a real account: per-topic off → bell hides for that game only; back on → returns; per-app `_master` off → hides; global `_all/_master` off → hides everywhere. Vite `@fs` resolution of the new cross-package import confirmed 200 in all four dev servers. All four build clean. Bell click stays the authed boundary ([[feedback_sq_verification_constraint]]).
+**Yahdle specifics:** was the reference impl; now the consumer. Its local `isNudgeEnabled` was deleted and re-exported as a thin app-bound wrapper (`userId => sqIsNudgeEnabled(supabase, userId, 'yahdle')`) so `MultiplayerCard.jsx` needed no change. `sendNudge`'s hand-rolled AbortController block collapsed into `postNudge`. The `yahdle_mark_nudged` stamp still runs only after a confirmed delivery, and still warns rather than throws (c261). SW → `yahdle-v14`. Commit `ac3c47a`.
