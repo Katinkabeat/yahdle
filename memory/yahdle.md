@@ -3,6 +3,13 @@
 Per the SQ session memory convention, update this file at the end of every
 Yahdle work session with: what changed, what's pending, and any gotchas.
 
+**2026-07-10 (c262):** `requestRematch` (`src/lib/multiplayerActions.js`) now uses
+`firePushAndReport` from `sq-ui/utils/report.js` instead of a bare `.catch(()=>{})`
+— a failed `rematch_requested` push is reported to the private `#error-log` Discord
+channel (via the `sq-report-client-error` edge fn) instead of vanishing. No
+`CACHE_VERSION` bump (sw.js is push-only, version is inert). Pipeline built in c265;
+see the auto-memory `project_sq_error_log`.
+
 ## Game overview
 
 Push-your-luck daily word-dice game
