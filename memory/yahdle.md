@@ -259,3 +259,18 @@ Cross-game audit follow-up after the Oublex silent-write bug. Yahdle's daily-res
 - **Verified locally (preview, service_role session-injection + seeded 12/12 scorecard):** (1) success path — completed game on load → `recordDaily` → row written (score 60); (2) **self-heal** — tampered access token → console "attempt 1 failed" → `refreshSession()` → attempt 2 wrote the row (no error surfaced). Both live in-app. Test user + rows cleaned up.
 - **SW note:** Yahdle's `sw.js` is push-only (no fetch/caches handler), so `CACHE_VERSION` is inert — not bumped (same as Oublex; unlike Rungles whose SW actually caches). New build reaches users on normal reload.
 - Sibling fixes: Oublex (c254 done), Rungles (`cfcf274` done), Wordy (pending — same audit).
+
+## 2026-07-10 — c248's cooldown stamp never ran: `.catch()` on a supabase thenable (false failure toast)
+Rae nudged her Yahdle test game: **got an error toast, but the push arrived.** The inverse of the Wordy bug found the same morning (c260) — there the toast said success and nothing sent; here the toast said failure and the send worked.
+
+**Root cause:** `sendNudge` (`src/lib/multiplayerActions.js:137`, shipped in c248) ended with
+`await supabase.rpc('yahdle_mark_nudged', { p_game_id: gameId }).catch(() => {})`.
+`supabase.rpc()` returns a **`PostgrestBuilder`, which is a thenable, not a Promise** — it implements `then()` but has **no `.catch()`**. So the chain throws `TypeError: ....catch is not a function` **synchronously, after the push has already been delivered**. The caller's try/catch turns that into "couldn't send" even though the nudge landed. Reproduced at runtime against supabase-js 2.105.3: `typeof builder.then === 'function'`, `typeof builder.catch === 'undefined'`, `builder instanceof Promise === false`.
+
+**Second, quieter consequence:** because the TypeError fires *before* `yahdle_mark_nudged` resolves, **the 12h cooldown was never stamped once since c248 shipped.** Confirmed in prod: `max(yahdle_games.last_nudged_at)` = 2026-07-09 13:47 UTC, hours before c248 deployed (17:26 UTC). Yahdle nudges were effectively unthrottled for a day.
+
+**Fix:** `const { error: markErr } = await supabase.rpc(...)`; `if (markErr) console.warn(...)`. Never throw on a failed stamp — the push landing is what "sent" means, and a stamp error must not report a failed send. Same invariant now holds in Wordy (c260) and Yahdle. SW → `yahdle-v13`. Commit `2d5e8a7`.
+
+**Verified:** the RPC itself was never the problem — `yahdle_mark_nudged` exists, is SECURITY DEFINER, and `has_function_privilege('authenticated', …, 'EXECUTE')` is true. Proved old-vs-new line shape at runtime: old throws `TypeError`, new surfaces the error as a value and cannot throw. Build clean.
+
+**Class of bug — check this on every new supabase call:** grepped `.rpc(...)/.from(...)` chained to `.catch(` across wordy/rungles/snibble/yahdle/oublex/rae-side-quest — **this was the only occurrence.** `.then()` works, `.catch()`/`.finally()` do not. Use `const { data, error } = await …` or wrap in `Promise.resolve()`.
