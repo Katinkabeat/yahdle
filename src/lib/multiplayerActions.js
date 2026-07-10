@@ -126,6 +126,8 @@ export async function sendNudge(gameId, nudgerName) {
   const { delivered, reason } = await postNudge({
     url: `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/yahdle-push-notification`,
     anonKey: import.meta.env.VITE_SUPABASE_ANON_KEY,
+    reportUrl: `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/sq-report-client-error`,
+    game: 'yahdle',
     body: { type: 'nudge', game_id: gameId, nudger_name: nudgerName },
   })
   if (!delivered) throw new Error(nudgeFailureMessage(reason))
