@@ -4,8 +4,15 @@ import { BrowserRouter } from 'react-router-dom'
 import { Toaster } from 'react-hot-toast'
 import App from './App.jsx'
 import { ThemeProvider } from './contexts/ThemeContext.jsx'
-import { SQErrorBoundary } from '../../rae-side-quest/packages/sq-ui/index.js'
+import { SQErrorBoundary, installGlobalErrorReporting } from '../../rae-side-quest/packages/sq-ui/index.js'
 import './index.css'
+
+// Report uncaught errors + unhandled rejections + render crashes to #error-log (c266).
+installGlobalErrorReporting({
+  game: 'yahdle',
+  reportUrl: `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/sq-report-client-error`,
+  anonKey: import.meta.env.VITE_SUPABASE_ANON_KEY,
+})
 
 // Register service worker for push notifications + PWA.
 // Path uses BASE_URL so it works under /yahdle/ in prod and /yahdle/ in dev.
