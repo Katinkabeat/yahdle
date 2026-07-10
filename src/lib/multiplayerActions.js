@@ -134,7 +134,12 @@ export async function sendNudge(gameId, nudgerName) {
   if (!ok) throw new Error("Couldn't reach them just now — try again in a bit.")
   // Start the 12h cooldown only now that the push actually landed. yahdle_nudge
   // no longer stamps up-front, so a failed send above never locks the game.
-  await supabase.rpc('yahdle_mark_nudged', { p_game_id: gameId }).catch(() => {})
+  // supabase.rpc() returns a thenable, not a Promise — it has no .catch(), so
+  // chaining one throws a TypeError *after* the push has gone out, surfacing as
+  // a false "couldn't send" toast. Await and warn: the push landing is what
+  // "sent" means, and a missed cooldown stamp must never report a failed send.
+  const { error: markErr } = await supabase.rpc('yahdle_mark_nudged', { p_game_id: gameId })
+  if (markErr) console.warn('[nudge] cooldown stamp failed:', markErr)
 }
 
 // Whether a user has Yahdle nudge notifications turned on. Used to hide the
