@@ -3,6 +3,15 @@
 Per the SQ session memory convention, update this file at the end of every
 Yahdle work session with: what changed, what's pending, and any gotchas.
 
+**2026-07-12 (c274):** cross-game notification-tap routing fix. `main.jsx` now
+calls `installNotificationNav()` (new sq-ui helper) — the hub SW posts a
+`{type:'NAVIGATE', url}` message on a push tap and this navigates the already-open
+app to the target board. `clients.openWindow()` was a no-op inside an already-running
+installed PWA on Android, which is why taps did nothing / stayed on the wrong board.
+Commit `cb9968a`. Substantive fix is in the hub (`public/sw.js` +
+`sq-ui/utils/notificationNav.js`); Yahdle only wires the receiver. See auto-memory
+`feedback_sq_notification_click_routing`.
+
 **2026-07-10 (c262):** `requestRematch` (`src/lib/multiplayerActions.js`) now uses
 `firePushAndReport` from `sq-ui/utils/report.js` instead of a bare `.catch(()=>{})`
 — a failed `rematch_requested` push is reported to the private `#error-log` Discord
