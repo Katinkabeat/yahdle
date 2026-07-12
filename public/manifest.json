@@ -4,7 +4,7 @@
   "description": "Push-your-luck daily word-dice game",
   "start_url": "/yahdle/",
   "scope": "/yahdle/",
-  "display": "standalone",
+  "display": "browser",
   "orientation": "portrait",
   "theme_color": "#7c3aed",
   "background_color": "#faf5ff",
