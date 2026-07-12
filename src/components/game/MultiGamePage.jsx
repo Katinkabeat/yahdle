@@ -168,15 +168,10 @@ export default function MultiGamePage({ session, profile, isAdmin }) {
 
   useEffect(() => { refresh() }, [refresh])
 
-  // A push notification (turn change, rematch, etc.) is the fastest signal
-  // that the game changed — the realtime socket is throttled while the tab
-  // is backgrounded. The SW relays the push as an 'sq:push-refresh' window
-  // event; refresh immediately instead of waiting on the socket/poll.
-  useEffect(() => {
-    const onPushRefresh = () => refresh()
-    window.addEventListener('sq:push-refresh', onPushRefresh)
-    return () => window.removeEventListener('sq:push-refresh', onPushRefresh)
-  }, [refresh])
+  // (Removed in c272: the 'sq:push-refresh' fast-path listened for a message
+  // relayed by the game's own service worker, which no longer exists — games
+  // are non-installable and carry no SW. MP updates flow via the realtime
+  // socket + poll. Push is hub-centralized; there's no game-side push signal.)
 
   // Fetch profiles for opponents AND no-show invitees (for the greyed pills).
   const oppIdsKey = [...new Set([...opponents.map(o => o.user_id), ...noShowIds])].join(',')
