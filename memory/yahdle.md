@@ -318,3 +318,9 @@ Yahdle surfaced the bug that drove the platform-wide fix: three #error-log alert
 - `yahdle-push-notification` now shares the platform send contract: `sendWithRetry` (2 retries, 400/1200ms backoff, on 5xx / 429 / no-status network errors), `pushErrDetail` (real status + body + host + user + attempts in the report), and a failed send returns `{sent:false}` instead of throwing (a throw used to abort the `game_finished` fan-out, so the *other* player got nothing).
 - Per-game `app` fallback (`['sidequest','yahdle']`) removed — single `PUSH_APP = 'sidequest'` lookup. No SW bump needed (edge fn only, no client change).
 - See `rae-side-quest/memory/rae-side-quest.md` (same date) for the cross-game detail and the test-send incident.
+
+## 2026-07-14 (later) — the missing turn notification was pg_net, not the push fn (c278)
+Yahdle again surfaced the platform bug. Rae had 2 games where it was her turn and got only 1 notification. `net._http_response` showed why: `f60389de`'s turn-change push **timed out in pg_net at 5031ms and was never sent**, while `90b3a7c8`'s (37s later) returned `{"sent":true}` and arrived. Not a tray/grouping issue — the push never left.
+- Platform fix (all games): pg_net `timeout_milliseconds` 5s → 15s across 27 fns, plus a 9s ceiling on total retry time so the retry can't overrun pg_net's budget. See `rae-side-quest/memory/rae-side-quest.md` (same date).
+- `yahdle-push-notification` responses now echo the notification `tag` + recipient, so the pg_net log names the game (`yahdle-turn-<gameId>`) instead of a bare `{"sent":true}`.
+- Verified: a real turn push for `f60389de` then succeeded on the identical path that had silently dropped 19 minutes earlier.
