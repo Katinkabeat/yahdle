@@ -18,8 +18,8 @@
 //   6. game_closed      — expire sweep closed a never-filled game (only
 //                         the creator was seated). Notifies the creator.
 //
-// Reuses the unified push_subscriptions table. Subscription fallback
-// order: ['sidequest', 'yahdle'] — most users opt in via the SQ hub.
+// Reuses the unified push_subscriptions table. Every address is stored under
+// the single 'sidequest' app — the hub is the only surface that subscribes.
 
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
@@ -61,6 +61,9 @@ async function sendIfOptedIn(
   }
   return sendPushToUser(supabase, userId, payload, topic)
 }
+
+// The one app every push address is stored under (see sendPushToUser).
+const PUSH_APP = 'sidequest'
 
 // ── Transient-failure retry (c271) ───────────────────────────────────────────
 // A 5xx / 429 / timeout from a push service is that service having a moment, not
@@ -121,37 +124,41 @@ async function sendPushToUser(
   payload: { title: string; body: string; tag: string; url: string; icon?: string },
   topic = 'unknown'
 ): Promise<{ sent: boolean; reason?: string; via?: string }> {
-  const apps = ['sidequest', 'yahdle']
-  for (const app of apps) {
-    const { data: sub } = await supabase
-      .from('push_subscriptions')
-      .select('endpoint, keys_p256dh, keys_auth')
-      .eq('user_id', userId)
-      .eq('app', app)
-      .maybeSingle()
-    if (!sub) continue
-    const pushSubscription = {
-      endpoint: sub.endpoint,
-      keys: { p256dh: sub.keys_p256dh, auth: sub.keys_auth },
-    }
-    try {
-      await sendWithRetry(pushSubscription, payload, userId, app, sub.endpoint)
-      return { sent: true, via: app }
-    } catch (pushErr: any) {
-      if (pushErr.statusCode === 410 || pushErr.statusCode === 404) {
-        await supabase.from('push_subscriptions').delete().eq('user_id', userId).eq('app', app)
-        await reportAddressDeath('Yahdle', userId, app, topic, pushErr.statusCode, sub.endpoint)
-        // Fall through to the next app (fallback)
-        continue
-      }
-      // One recipient's failed send is not the whole call's failure: throwing here
-      // aborted the fan-out loops (game_finished), so the *other* players silently
-      // got no push either. Report it and let the caller carry on.
-      await reportServerError('Yahdle', topic, pushErr?.message ?? String(pushErr))
-      return { sent: false, reason: 'send failed' }
-    }
+  // Every push address lives under the unified 'sidequest' app: the hub is the only
+  // surface that ever calls pushManager.subscribe, and it hardcodes that value. The
+  // old per-game fallback list ('wordy', 'rungles', …) dated from when each game
+  // held its own notification settings; nothing has written a per-game row since the
+  // unification and none survive in the table, so the loop only ever hit iteration
+  // one. Single lookup now — a miss here means the user genuinely has no address.
+  const { data: sub } = await supabase
+    .from('push_subscriptions')
+    .select('endpoint, keys_p256dh, keys_auth')
+    .eq('user_id', userId)
+    .eq('app', PUSH_APP)
+    .maybeSingle()
+
+  if (!sub) return { sent: false, reason: 'no push subscription' }
+
+  const pushSubscription = {
+    endpoint: sub.endpoint,
+    keys: { p256dh: sub.keys_p256dh, auth: sub.keys_auth },
   }
-  return { sent: false, reason: 'no push subscription' }
+
+  try {
+    await sendWithRetry(pushSubscription, payload, userId, PUSH_APP, sub.endpoint)
+    return { sent: true, via: PUSH_APP }
+  } catch (pushErr: any) {
+    if (pushErr.statusCode === 410 || pushErr.statusCode === 404) {
+      await supabase.from('push_subscriptions').delete().eq('user_id', userId).eq('app', PUSH_APP)
+      await reportAddressDeath('Yahdle', userId, PUSH_APP, topic, pushErr.statusCode, sub.endpoint)
+      return { sent: false, reason: 'address expired' }
+    }
+    // One recipient's failed send is not the whole call's failure: throwing here
+    // aborted the fan-out loops (game_finished), so the *other* players silently
+    // got no push either. Report it and let the caller carry on.
+    await reportServerError('Yahdle', topic, pushErr?.message ?? String(pushErr))
+    return { sent: false, reason: 'send failed' }
+  }
 }
 
 
