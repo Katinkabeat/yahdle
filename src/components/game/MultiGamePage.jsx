@@ -333,6 +333,8 @@ export default function MultiGamePage({ session, profile, isAdmin }) {
   function tryScore(categoryId) {
     if (!isMyTurn || isGameOver) return
     if (myPlayer?.scores?.[categoryId] != null) return
+    // Tapping any category dismisses a stale "take a 0?" ask on another cell.
+    setZeroAskCategory(null)
     const cat = CATEGORIES.find(c => c.id === categoryId)
     if (!cat) return
     const result = evaluateScoreAttempt({

@@ -241,6 +241,8 @@ export default function SoloGamePage({ session, profile, isAdmin }) {
   // evaluateScoreAttempt so MP shares the same rules.
   function tryScore(categoryId) {
     if (state.scores[categoryId]) return
+    // Tapping any category dismisses a stale "take a 0?" ask on another cell.
+    setZeroAskCategory(null)
     const cat = CATEGORIES.find(c => c.id === categoryId)
     if (!cat) return
     const result = evaluateScoreAttempt({
@@ -255,6 +257,7 @@ export default function SoloGamePage({ session, profile, isAdmin }) {
 
   function confirmZero(categoryId) {
     if (state.scores[categoryId]) return
+    setZeroAskCategory(null)
     applyScore(categoryId, '', 0)
   }
 
