@@ -324,3 +324,8 @@ Yahdle again surfaced the platform bug. Rae had 2 games where it was her turn an
 - Platform fix (all games): pg_net `timeout_milliseconds` 5s → 15s across 27 fns, plus a 9s ceiling on total retry time so the retry can't overrun pg_net's budget. See `rae-side-quest/memory/rae-side-quest.md` (same date).
 - `yahdle-push-notification` responses now echo the notification `tag` + recipient, so the pg_net log names the game (`yahdle-turn-<gameId>`) instead of a bare `{"sent":true}`.
 - Verified: a real turn push for `f60389de` then succeeded on the identical path that had silently dropped 19 minutes earlier.
+
+## 2026-07-14 — Take-zero box no longer sticks around (UI fix)
+Rae's repro: tap a category the word doesn't fit → "Take a 0?" box appears; tap a *different* category that does fit → it scores, but the ask box on the first category stayed up forever (nothing ever cleared `zeroAskCategory`, and the asked cell stays unfilled so it kept rendering).
+- Fix: `tryScore` in both `SoloGamePage.jsx` and `MultiGamePage.jsx` now clears `zeroAskCategory` at the top, so tapping any category dismisses a stale ask (if the new tap also can't fit, the ask just moves to that cell). Solo's `confirmZero` also clears it explicitly, matching MP.
+- Verified locally as Test (session-injection, solo daily): built TON, tapped 4-Letter → ask box; tapped 3-Letter → scored +3 and the box dismissed. No console errors. Commit `4a43b2b`, Quill posted.
