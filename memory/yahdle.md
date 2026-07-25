@@ -33,6 +33,7 @@ or the bug returns for anyone with it on. `animating` state deleted from both
 pages; `.die-rolling` keyframe removed from index.css.
 **Still open:** whether kept dice should show their letter dimmed instead of `·`
 (mockup: `docs/roll-feedback-mockup.html`). Deferred, not rejected.
+**Quill changelog posted 2026-07-24.**
 
 **2026-07-24:** rematch handshake is now **terminal**. Bug Rae hit: re-opening a
 finished game let you click Rematch / Accept / Decline again forever.
