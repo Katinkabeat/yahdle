@@ -122,7 +122,7 @@ export default function MultiplayerCard({
   }
 
   async function handleCancelRematch(gameId) {
-    if (!confirm('Cancel this rematch request?')) return
+    if (!confirm('Cancel this rematch request? You won’t be able to ask again on this game.')) return
     try {
       await declineRematch(gameId)
     } catch (err) {
@@ -141,7 +141,7 @@ export default function MultiplayerCard({
   }
 
   async function handleDeclineRematch(gameId) {
-    if (!confirm('Decline this rematch?')) return
+    if (!confirm('Decline this rematch? Neither of you can ask again on this game.')) return
     try {
       await declineRematch(gameId)
     } catch (err) {

@@ -114,6 +114,13 @@ export default function GameOverComparison({
 // one-open-request flow; N-player games (not creatable in the current
 // lobby) keep the legacy unilateral re-invite button.
 function RematchControls({ game, myUserId, onRematch, onRequestRematch, onAcceptRematch, onDeclineRematch, busy }) {
+  // A rematch resolves exactly once per board: accepted (a new game
+  // exists) or declined/cancelled (stamped). Either way every control
+  // disappears for BOTH players and the finished game is just a
+  // scorecard from then on — no re-requesting, and no stale
+  // Accept/Decline pair for the player who already answered.
+  if (game?.rematch_new_game_id || game?.rematch_declined_at) return null
+
   const isDuel = (game?.max_players ?? 2) === 2
   if (!isDuel) {
     return (

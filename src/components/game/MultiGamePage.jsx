@@ -82,6 +82,10 @@ export default function MultiGamePage({ session, profile, isAdmin }) {
   const [rematchBusy, setRematchBusy] = useState(false)
   // Guards the requester's one-shot auto-jump into the accepted game.
   const rematchNavigated = useRef(false)
+  // Was the rematch ALREADY accepted when I opened this board? null until
+  // the game loads. Distinguishes "accepted while I'm watching" (jump in)
+  // from "accepted at some point in the past" (let me read the scores).
+  const rematchLinkedOnOpen = useRef(null)
   const [animating, setAnimating] = useState(() => new Array(DIE_COUNT).fill(false))
   const { dict, dictReady } = useDictionary()
 
@@ -241,14 +245,22 @@ export default function MultiGamePage({ session, profile, isAdmin }) {
   // When my opponent accepts the rematch I requested, the finished game
   // gets back-linked to the new game (c165). Auto-jump the requester into
   // it — the accepter navigates directly from handleAcceptRematch. Fire
-  // once; only for the player who actually requested.
+  // once; only for the player who actually requested; and only on the
+  // null -> set transition. Without that last condition, re-opening the
+  // old board from the completed list bounced the requester straight back
+  // into the rematch every time, so they could never review the scores.
   useEffect(() => {
-    if (!game?.rematch_new_game_id || rematchNavigated.current) return
+    if (!game) return
+    if (rematchLinkedOnOpen.current === null) {
+      rematchLinkedOnOpen.current = !!game.rematch_new_game_id
+    }
+    if (rematchLinkedOnOpen.current) return
+    if (!game.rematch_new_game_id || rematchNavigated.current) return
     if (game.rematch_requested_by !== userId) return
     rematchNavigated.current = true
     toast.success('Rematch on!')
     navigate(`/multi/${game.rematch_new_game_id}`)
-  }, [game?.rematch_new_game_id, game?.rematch_requested_by, userId, navigate])
+  }, [game, userId, navigate])
 
   // withBusy gates actions that need a server round-trip before the UI
   // can reflect the next state (Roll, Score). Optimistic actions
@@ -435,8 +447,16 @@ export default function MultiGamePage({ session, profile, isAdmin }) {
     }
   }
 
+  // Both roles land here: the recipient declining, or the requester
+  // cancelling. Either one is final for this board now, so confirm first
+  // — a stray tap shouldn't quietly burn the rematch for both players.
   async function handleDeclineRematch() {
     if (rematchBusy) return
+    const mine = game?.rematch_requested_by === userId
+    const msg = mine
+      ? 'Cancel this rematch request? You won’t be able to ask again on this game.'
+      : 'Decline this rematch? Neither of you can ask again on this game.'
+    if (!confirm(msg)) return
     setRematchBusy(true)
     try {
       await declineRematch(gameId)

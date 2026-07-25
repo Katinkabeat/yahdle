@@ -3,6 +3,30 @@
 Per the SQ session memory convention, update this file at the end of every
 Yahdle work session with: what changed, what's pending, and any gotchas.
 
+**2026-07-24:** rematch handshake is now **terminal**. Bug Rae hit: re-opening a
+finished game let you click Rematch / Accept / Decline again forever.
+`yahdle_decline_rematch` had nulled `rematch_requested_by`, which is
+indistinguishable from "never asked", so the plain Rematch button came back for
+BOTH players (and every request fires a push at the opponent); accept never
+cleared the flag, so the accepter still saw a live Accept/Decline pair whose
+Decline threw "Rematch already started". Migration
+`yahdle_rematch_resolved.sql` (applied to prod via pooler psql) adds
+`rematch_declined_at` and makes all three RPCs treat resolved-once as final —
+accepted (`rematch_new_game_id`) or declined (`rematch_declined_at`).
+`RematchControls` returns null in either state, so the old board is just a
+scorecard. **Cancel-by-the-requester counts as a decline** (Rae's call — otherwise
+request/cancel/request is a push-spam loop); both confirm dialogs now warn that
+it can't be re-asked. Also fixed: `MultiGamePage`'s auto-jump into an accepted
+rematch now fires only on the null → set transition (`rematchLinkedOnOpen` ref),
+so re-opening the old board no longer bounces the requester out before they can
+read the scores. Verified with an 11-branch rolled-back psql sim impersonating
+both players + a temp `/rematch-preview` harness (since reverted) covering all 5
+UI states. Lobby needed no change — its filters already keyed off the same
+columns. **Gotcha:** oublex / snibble / the sq-game-starter template use a
+UNILATERAL rematch (one button spawns a new game, old game untouched), so they
+can't have this bug — but their Rematch button is likewise never gated, so
+clicking it N times posts N duplicate invites. Uncarded.
+
 **2026-07-12 (c274):** cross-game notification-tap routing fix. `main.jsx` now
 calls `installNotificationNav()` (new sq-ui helper) — the hub SW posts a
 `{type:'NAVIGATE', url}` message on a push tap and this navigates the already-open
