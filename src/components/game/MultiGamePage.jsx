@@ -86,7 +86,6 @@ export default function MultiGamePage({ session, profile, isAdmin }) {
   // the game loads. Distinguishes "accepted while I'm watching" (jump in)
   // from "accepted at some point in the past" (let me read the scores).
   const rematchLinkedOnOpen = useRef(null)
-  const [animating, setAnimating] = useState(() => new Array(DIE_COUNT).fill(false))
   const { dict, dictReady } = useDictionary()
 
   const myPlayer = players.find(p => p.user_id === userId)
@@ -277,9 +276,6 @@ export default function MultiGamePage({ session, profile, isAdmin }) {
   function handleRoll() {
     if (!isMyTurn || (myTurnState.rolls_used ?? 0) >= ROLLS_PER_TURN) return
     if (inBuilder.every(Boolean)) return
-    // Animate only the dice that will actually re-roll (matches solo).
-    setAnimating(inBuilder.map(b => !b))
-    setTimeout(() => setAnimating(new Array(DIE_COUNT).fill(false)), 500)
     withBusy(async () => {
       const newFaces = await trackTurnMutation(() => rollDice(gameId))
       setMyTurnState(s => ({
@@ -681,7 +677,6 @@ export default function MultiGamePage({ session, profile, isAdmin }) {
                 <DiceRack
                   faces={faces}
                   inBuilder={inBuilder}
-                  animating={animating}
                   rollsThisTurn={myTurnState.rolls_used ?? 0}
                   onTapDie={tapRackDie}
                   onRoll={handleRoll}

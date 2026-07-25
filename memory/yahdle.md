@@ -3,6 +3,37 @@
 Per the SQ session memory convention, update this file at the end of every
 Yahdle work session with: what changed, what's pending, and any gotchas.
 
+**2026-07-24 (b):** dice roll animation replaced with a **letter reel**. Rae hit a
+roll that "never happened" but still burned the roll. Reproduced on the real
+daily: turn 1 roll 2 is `TONCOW`; keep 5 tiles and the one live die (index 1, `O`)
+re-rolls to `O` again. Rack reads `· O · · · ·` before and after, counter goes
+2/3 → 3/3, button greys out. **Not a logic bug** — `handleRoll` guards the
+all-parked case, so a roll always re-rolls something; each die has 8 distinct
+faces, so any single live die repeats 1 in 8 (today's puzzle: 16 same-face
+re-rolls across 11 of 12 turns, right on the mean). The real fault was feedback:
+the old `.die-rolling` keyframe spun the tile through `rotateX(1080deg)` while
+the letter was already set to its final value, so a repeat was a static glyph
+rotating onto itself, on a rack that is mostly `·` when you keep tiles.
+Rae picked the slot-reel treatment from a 4-option mockup
+(`docs/roll-animation-mockup.html`). `DiceRack` now owns the animation in a
+`DieTile` subcomponent: a strip of 7 decoys drawn from **that die's real face
+set** plus the true result, scrolled with the Web Animations API (700ms,
+`cubic-bezier(.15,.85,.25,1)`).
+**Gotchas worth keeping:** (1) trigger is `rollsThisTurn` going UP, NOT the old
+`animating` flag — the flag was set optimistically on tap, so in MP it could
+finish before the server returned faces, and two rolls inside its 500ms window
+left it true→true which never restarted the animation. The counter changes once
+per roll in the same update that carries the faces. (2) Use rAF/WAAPI, never
+`setInterval` — background tabs clamp intervals to ~1s and the churn stalls
+(hit this in the mockup). (3) A `setTimeout(REEL_MS+250)` backstop clears the
+strip, because `onfinish` never fires while the document is hidden and the strip
+shows DECOY letters — without it a tab backgrounded mid-roll returns to a die
+frozen on a fake letter. (4) Reduced motion gets a 260ms opacity dip instead,
+or the bug returns for anyone with it on. `animating` state deleted from both
+pages; `.die-rolling` keyframe removed from index.css.
+**Still open:** whether kept dice should show their letter dimmed instead of `·`
+(mockup: `docs/roll-feedback-mockup.html`). Deferred, not rejected.
+
 **2026-07-24:** rematch handshake is now **terminal**. Bug Rae hit: re-opening a
 finished game let you click Rematch / Accept / Decline again forever.
 `yahdle_decline_rematch` had nulled `rematch_requested_by`, which is

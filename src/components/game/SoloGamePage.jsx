@@ -76,9 +76,6 @@ export default function SoloGamePage({ session, profile, isAdmin }) {
 
   const [state, setState] = useState(() => loadState(userId, gameId) || makeInitialState())
   const { dict, dictReady } = useDictionary()
-  // Per-die animation flag — set true when a die is mid-roll, cleared 500ms
-  // later. Drives the .die-rolling CSS keyframe in index.css.
-  const [animating, setAnimating] = useState(() => new Array(DIE_COUNT).fill(false))
 
   useEffect(() => {
     saveState(userId, gameId, state)
@@ -179,9 +176,6 @@ export default function SoloGamePage({ session, profile, isAdmin }) {
     if (inBuilder.every(Boolean)) return
     const nextRollNum = state.rollsThisTurn + 1
     const newFaces = rollForTurn(seedBase, state.turn, nextRollNum, state.faces, inBuilder)
-    // Animate only the dice that actually re-rolled.
-    setAnimating(inBuilder.map(b => !b))
-    setTimeout(() => setAnimating(new Array(DIE_COUNT).fill(false)), 500)
     setState(s => ({
       ...s,
       faces: newFaces,
@@ -339,7 +333,6 @@ export default function SoloGamePage({ session, profile, isAdmin }) {
           <DiceRack
             faces={state.faces}
             inBuilder={inBuilder}
-            animating={animating}
             rollsThisTurn={state.rollsThisTurn}
             onTapDie={tapRackDie}
             onRoll={handleRoll}

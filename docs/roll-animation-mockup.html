@@ -1,0 +1,263 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Yahdle — roll animation options</title>
+<style>
+  :root {
+    --bg: #120a24;
+    --card: #1a1130;
+    --edge: #2d1b55;
+    --edge-hi: #4a2d80;
+    --ink: #f4efff;
+    --dim: #a690d6;
+    --purple: #7c3aed;
+    --purple-hi: #9061f9;
+    --amber: #f59e0b;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 20px 14px 70px;
+    background: var(--bg); color: var(--ink);
+    font: 15px/1.5 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  }
+  .wrap { max-width: 470px; margin: 0 auto; }
+  h1 { font-size: 19px; margin: 0 0 4px; }
+  .sub { color: var(--dim); font-size: 13px; margin: 0 0 16px; }
+
+  .switches { display: flex; flex-wrap: wrap; gap: 14px; margin-bottom: 16px; font-size: 12.5px; color: var(--dim); }
+  .switches label { display: flex; align-items: center; gap: 6px; cursor: pointer; }
+  .switches input { accent-color: var(--purple-hi); width: 15px; height: 15px; }
+
+  .row {
+    background: var(--card); border: 1px solid var(--edge);
+    border-radius: 14px; padding: 12px; margin-bottom: 11px;
+  }
+  .row.pick { border-color: var(--purple); }
+  .rowhead { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; margin-bottom: 9px; }
+  .name { font-size: 13.5px; font-weight: 700; }
+  .name .tagged { color: var(--amber); font-size: 10.5px; font-weight: 700; letter-spacing: .06em; margin-left: 6px; }
+  .desc { font-size: 12px; color: var(--dim); margin: 0 0 10px; }
+
+  .rack { display: flex; justify-content: center; gap: 7px; margin-bottom: 10px; min-height: 46px; }
+  .tile {
+    position: relative; width: 46px; height: 46px; border-radius: 9px;
+    display: grid; place-items: center;
+    font: 700 21px/1 ui-serif, Georgia, serif;
+    background: #fdfaff; color: #2a1758;
+    border: 1px solid #d9c9f5;
+    box-shadow: 0 2px 0 #00000038;
+    will-change: transform;
+  }
+  .tile .val { position: absolute; right: 3px; bottom: 2px; font: 600 9px/1 ui-sans-serif, sans-serif; opacity: .55; }
+  .tile.kept { background: transparent; color: #6c58a0; border: 1px dashed var(--edge-hi); box-shadow: none; }
+
+  /* 1 — today */
+  @keyframes flip { 0% { transform: rotateX(0) scale(1); } 40% { transform: rotateX(540deg) scale(.78); opacity: .7; } 100% { transform: rotateX(1080deg) scale(1); opacity: 1; } }
+  .anim-flip { animation: flip .5s ease-out; }
+
+  /* 2 — cycle only: gentle breathing while the letters churn */
+  @keyframes pulse { 0%,100% { transform: scale(1); } 50% { transform: scale(.93); } }
+  .anim-pulse { animation: pulse .16s ease-in-out infinite; }
+
+  /* 3 — cycle + tumble jitter */
+  @keyframes jitter {
+    0%   { transform: translateY(0) rotate(0deg); }
+    25%  { transform: translateY(-5px) rotate(-7deg); }
+    50%  { transform: translateY(1px) rotate(6deg); }
+    75%  { transform: translateY(-3px) rotate(-4deg); }
+    100% { transform: translateY(0) rotate(0deg); }
+  }
+  .anim-jitter { animation: jitter .22s ease-in-out infinite; }
+
+  /* 4 — landing bounce, played once the churn stops */
+  @keyframes land {
+    0%   { transform: scale(1.16); box-shadow: 0 0 0 3px rgba(144,97,249,.55), 0 2px 0 #00000038; }
+    60%  { transform: scale(.97); }
+    100% { transform: scale(1); box-shadow: 0 2px 0 #00000038; }
+  }
+  .anim-land { animation: land .26s cubic-bezier(.34,1.56,.64,1); }
+
+  .go {
+    font: inherit; font-weight: 700; cursor: pointer; color: #fff;
+    padding: 8px 16px; border-radius: 9px; border: 0; font-size: 13px;
+    background: linear-gradient(180deg, var(--purple-hi), var(--purple));
+    box-shadow: 0 2px 0 #00000050;
+  }
+  .go:disabled { opacity: .4; cursor: not-allowed; }
+  .result { text-align: center; font-size: 12px; color: var(--dim); min-height: 18px; margin-top: 7px; }
+  .result b { color: var(--amber); }
+
+  .allbtn {
+    display: block; margin: 0 auto 18px; font: inherit; font-size: 13px; font-weight: 700;
+    cursor: pointer; padding: 9px 18px; border-radius: 10px; color: #fff; border: 0;
+    background: linear-gradient(180deg, var(--purple-hi), var(--purple)); box-shadow: 0 2px 0 #00000050;
+  }
+  .foot { font-size: 12.5px; color: var(--dim); border-left: 2px solid var(--edge-hi); padding-left: 11px; margin-top: 20px; }
+  .foot b { color: var(--ink); }
+</style>
+</head>
+<head></head>
+<body>
+<div class="wrap">
+  <h1>Roll animation options</h1>
+  <p class="sub">Same die, same scenario. The failure case is the one that matters: the die re-rolls and lands on the letter it already had.</p>
+
+  <div class="switches">
+    <label><input type="checkbox" id="same" checked> Land on the <b>same</b> letter (the bug case)</label>
+    <label><input type="checkbox" id="all"> Roll all 6 dice (a fresh turn)</label>
+  </div>
+
+  <button class="allbtn" id="rollAll">▶ Roll every option at once</button>
+
+  <div id="rows"></div>
+
+  <p class="foot">
+    <b>Why today's reads wrong:</b> the tile flips a full 1080°, but the letter painted on it never changes, so you watch one static glyph rotate and land on itself. Cycling the letter is what makes it read as a die rather than a card flip, and it is the part that fixes your bug: you <i>see</i> it churn and come back to O, so a repeat stops looking like a dead button.
+  </p>
+</div>
+
+<script>
+  const VALUES = { A:1,E:1,I:1,O:1,U:1,N:1,R:1,T:1,L:1,S:1,D:2,G:2,B:3,C:3,M:3,P:3,H:4,W:4 };
+  // Yahdle's real dice (src/lib/dice.js).
+  const DICE = [
+    ['A','E','I','T','R','N','L','D'],
+    ['A','E','O','T','R','S','N','H'],
+    ['A','I','U','T','S','N','L','M'],
+    ['A','E','O','U','R','S','L','C'],
+    ['E','I','O','U','T','R','P','B'],
+    ['E','I','O','S','N','L','W','G'],
+  ];
+  // Today's turn 1, roll 2 -> roll 3. Die 1 is the live one and repeats its O.
+  const START = ['T','O','N','C','O','W'];
+  const LIVE  = 1;
+  const NEW   = 'E';   // what a different-letter landing would look like
+  const SAME  = 'O';
+
+  const OPTIONS = [
+    { id:'flip',   name:'1 · Today',              tag:'shipped', desc:'rotateX 1080° over 0.5s. The letter is set to its final value up front and never changes.' },
+    { id:'cycle',  name:'2 · Letter cycling',     desc:'The face churns through that die’s eight letters, then settles. Light scale pulse, no spin.' },
+    { id:'tumble', name:'3 · Cycling + tumble',   desc:'Same churn, plus a hop and wobble so the die physically moves.' },
+    { id:'bounce', name:'4 · Cycling + landing',  tag:'suggested', desc:'Churn, then a snap-and-settle bounce with a brief ring on the die that landed.' },
+  ];
+
+  const rowsEl = document.getElementById('rows');
+  const sameEl = document.getElementById('same');
+  const allEl  = document.getElementById('all');
+
+  OPTIONS.forEach(o => {
+    const row = document.createElement('div');
+    row.className = 'row' + (o.tag === 'suggested' ? ' pick' : '');
+    row.innerHTML = `
+      <div class="rowhead">
+        <span class="name">${o.name}${o.tag ? `<span class="tagged">${o.tag.toUpperCase()}</span>` : ''}</span>
+        <button class="go" data-id="${o.id}">Roll</button>
+      </div>
+      <p class="desc">${o.desc}</p>
+      <div class="rack" id="rack-${o.id}"></div>
+      <div class="result" id="res-${o.id}"></div>`;
+    rowsEl.appendChild(row);
+  });
+
+  function liveIdx() { return allEl.checked ? [0,1,2,3,4,5] : [LIVE]; }
+  function finalFor(i) {
+    if (allEl.checked) return DICE[i][Math.floor(Math.random() * 8)];
+    return sameEl.checked ? SAME : NEW;
+  }
+
+  function paint(id) {
+    const rack = document.getElementById('rack-' + id);
+    rack.innerHTML = '';
+    const live = liveIdx();
+    START.forEach((f, i) => {
+      const el = document.createElement('div');
+      const isLive = live.includes(i);
+      el.className = 'tile' + (isLive ? '' : ' kept');
+      el.dataset.i = i;
+      el.innerHTML = `<span class="face">${isLive ? f : '·'}</span>` + (isLive ? `<span class="val">${VALUES[f]}</span>` : '');
+      rack.appendChild(el);
+    });
+    document.getElementById('res-' + id).innerHTML = '';
+  }
+
+  function setFace(tile, letter) {
+    tile.querySelector('.face').textContent = letter;
+    const v = tile.querySelector('.val');
+    if (v) v.textContent = VALUES[letter] ?? '';
+  }
+
+  function run(id) {
+    const rack = document.getElementById('rack-' + id);
+    const btn = document.querySelector(`.go[data-id="${id}"]`);
+    const live = liveIdx();
+    const finals = {};
+    live.forEach(i => finals[i] = finalFor(i));
+    btn.disabled = true;
+    paint(id);
+
+    if (id === 'flip') {
+      // Today's behaviour: final letter applied immediately, tile flips.
+      live.forEach(i => {
+        const tile = rack.querySelector(`[data-i="${i}"]`);
+        setFace(tile, finals[i]);
+        tile.classList.add('anim-flip');
+      });
+      setTimeout(() => finish(id, finals, btn), 520);
+      return;
+    }
+
+    const churnClass = id === 'tumble' ? 'anim-jitter' : 'anim-pulse';
+    const SWAP_MS = 60;   // how often the face changes while churning
+    live.forEach((i, n) => {
+      const tile = rack.querySelector(`[data-i="${i}"]`);
+      const stagger = n * 45;                 // dice land one after another
+      const dur = 480 + n * 45;
+      // rAF rather than setInterval: frame-synced, and browsers clamp
+      // background-tab intervals to ~1s, which would stall the churn.
+      const start = performance.now() + stagger;
+      let lastSwap = 0, started = false;
+      function frame(now) {
+        if (now < start) return requestAnimationFrame(frame);
+        if (!started) { started = true; tile.classList.add(churnClass); }
+        const elapsed = now - start;
+        if (elapsed >= dur) {
+          tile.classList.remove(churnClass);
+          setFace(tile, finals[i]);
+          if (id === 'bounce') {
+            tile.classList.add('anim-land');
+            setTimeout(() => tile.classList.remove('anim-land'), 280);
+          }
+          return;
+        }
+        if (elapsed - lastSwap >= SWAP_MS) {
+          lastSwap = elapsed;
+          setFace(tile, DICE[i][Math.floor(Math.random() * 8)]);
+        }
+        requestAnimationFrame(frame);
+      }
+      requestAnimationFrame(frame);
+    });
+    setTimeout(() => finish(id, finals, btn), 480 + live.length * 45 + 320);
+  }
+
+  function finish(id, finals, btn) {
+    btn.disabled = false;
+    if (allEl.checked) return;
+    const repeated = finals[LIVE] === START[LIVE];
+    document.getElementById('res-' + id).innerHTML = repeated
+      ? `landed on <b>${finals[LIVE]}</b> again — did that read as a roll?`
+      : `landed on <b>${finals[LIVE]}</b>`;
+  }
+
+  document.addEventListener('click', e => {
+    const b = e.target.closest('.go');
+    if (b) run(b.dataset.id);
+  });
+  document.getElementById('rollAll').addEventListener('click', () => OPTIONS.forEach(o => run(o.id)));
+  [sameEl, allEl].forEach(el => el.addEventListener('change', () => OPTIONS.forEach(o => paint(o.id))));
+
+  OPTIONS.forEach(o => paint(o.id));
+</script>
+</body>
+</html>
