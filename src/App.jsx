@@ -1,14 +1,16 @@
-import { lazy, Suspense, useEffect, useState } from 'react'
+import { Suspense, useEffect, useState } from 'react'
 import { Routes, Route, Navigate } from 'react-router-dom'
 import { supabase } from './lib/supabase.js'
 import { useTheme } from './contexts/ThemeContext.jsx'
+import { lazyWithRetry } from '../../rae-side-quest/packages/sq-ui/index.js'
 
 // Code-split each route so only the page being visited downloads up-front.
-const LobbyPage     = lazy(() => import('./components/lobby/LobbyPage.jsx'))
-const SoloGamePage  = lazy(() => import('./components/game/SoloGamePage.jsx'))
-const MultiGamePage = lazy(() => import('./components/game/MultiGamePage.jsx'))
-const StatsPage     = lazy(() => import('./components/stats/StatsPage.jsx'))
-const AdminPage     = lazy(() => import('./components/admin/AdminPage.jsx'))
+// lazyWithRetry (c314): a dropped chunk fetch retries instead of hard-crashing.
+const LobbyPage     = lazyWithRetry(() => import('./components/lobby/LobbyPage.jsx'))
+const SoloGamePage  = lazyWithRetry(() => import('./components/game/SoloGamePage.jsx'))
+const MultiGamePage = lazyWithRetry(() => import('./components/game/MultiGamePage.jsx'))
+const StatsPage     = lazyWithRetry(() => import('./components/stats/StatsPage.jsx'))
+const AdminPage     = lazyWithRetry(() => import('./components/admin/AdminPage.jsx'))
 
 function PageLoading() {
   return (
