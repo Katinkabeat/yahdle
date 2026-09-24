@@ -352,7 +352,7 @@ serve(async (req: Request) => {
       return new Response(JSON.stringify(result), { status: 200, headers: corsHeaders })
     }
 
-    // ── rematch_requested: client POST after yahdle_request_rematch ──
+    // ── rematch_requested: on_yahdle_rematch_requested trigger (c378; was a client POST) ──
     // A finished-game player claimed the single rematch slot; ping the
     // other player so they can accept. Reuses the 'invite' pref bucket
     // and tap target is the finished game (where Accept/Decline lives).
