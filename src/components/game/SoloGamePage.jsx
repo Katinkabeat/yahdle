@@ -94,16 +94,19 @@ export default function SoloGamePage({ session, profile, isAdmin }) {
   // state isn't itself complete, show a read-only results panel instead.
   // 'checking' | null (not played) | { play_date, score }
   const [serverResult, setServerResult] = useState('checking')
+  // c332: set by a test-account replay so the fresh board isn't bounced
+  // straight back to the already-played panel by the server check below.
+  const [replaying, setReplaying] = useState(false)
   useEffect(() => {
     // Local state already shows the finished game (full scorecard) — no need
     // for the server fallback panel; and dev/no-user just plays.
-    if (isGameOver || !userId) { setServerResult(null); return }
+    if (isGameOver || !userId || replaying) { setServerResult(null); return }
     let active = true
     fetchDailyResult(userId, gameId)
       .then(row => { if (active) setServerResult(row) })
       .catch(() => { if (active) setServerResult(null) }) // fail open — don't lock out on a transient error
     return () => { active = false }
-  }, [userId, gameId, isGameOver])
+  }, [userId, gameId, isGameOver, replaying])
 
   const checkingGate = !isGameOver && serverResult === 'checking'
   const showServerPanel = !isGameOver && serverResult && serverResult !== 'checking'
@@ -132,6 +135,7 @@ export default function SoloGamePage({ session, profile, isAdmin }) {
     try { localStorage.removeItem(storageKey(userId, gameId)) } catch {}
     try { sessionStorage.removeItem(`yahdle:recorded:${userId}:${gameId}`) } catch {}
     setRecordState('idle')
+    setReplaying(true)
     setState(makeInitialState())
     setServerResult(null)
   }
@@ -391,6 +395,16 @@ export default function SoloGamePage({ session, profile, isAdmin }) {
               <button className="btn-secondary" onClick={() => navigate('/')}>← Lobby</button>
               <button className="btn-primary" onClick={() => navigate('/stats')}>🏆 Leaderboard</button>
             </div>
+            {/* c332: same test-account replay, for when this device kept the finished scorecard. */}
+            {isTestAccount && !dayClosed && (
+              <button
+                type="button"
+                className="mt-3 text-xs font-bold opacity-70 hover:underline hover:opacity-100"
+                onClick={handleReplay}
+              >
+                Replay (test account)
+              </button>
+            )}
           </div>
         )}
 
