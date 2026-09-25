@@ -388,3 +388,9 @@ Rae's repro: tap a category the word doesn't fit → "Take a 0?" box appears; ta
 
 ## 2026-07-18 — Time-sensitive pushes send Urgency: high (c283)
 Follow-up to the 2026-07-14 stale-notification investigation (c285): battery saver / Doze defers normal-urgency FCM delivery up to ~1h, so a your-turn push could display already stale. The push fn now sends `urgency: 'high'` for topics where a held-back delivery goes stale — `your_turn`, `nudge`, `invite`, `opponent_joined` (new `HIGH_URGENCY_TOPICS` set; `topic` threaded into `sendWithRetry`). Outcome topics (`game_finished`, `invite_declined`, `game_closed`) stay normal — FCM can deprioritize senders that blanket-mark pushes high. Same edit across all 8 SQ push fns + the sq-game-starter scaffold. Deno type-check clean; deployed; verified with a live wordy nudge to Rae (`sent:true` through the new path). Only narrows the stale window — the hard guarantee is the SW staleness guard (c284, still pending).
+
+## 2026-09-24 — Test Accounts group (c332)
+Hub group `test-accounts` (Test + Claude test logins) is excluded from every leaderboard/stat; any MP game with a member seated is ignored for BOTH players; members get a "Replay (test account)" button on the daily finished screen and a replay overwrites the day's row (server-enforced). Check with `sq_is_test_account(uid)` / `sq_test_account_ids(uuid[])`. **Any new leaderboard/stat aggregate must add the exclusion.** Full detail on c332.
+
+## 2026-09-24 — Rematch push moved to a DB trigger (c378)
+`rematch_requested` push now fires from `on_yahdle_rematch_requested` (AFTER UPDATE, `rematch_requested_by` null→set, pg_net) instead of a client POST after `yahdle_request_rematch`, which could drop silently on mobile and never reached `sq_http_log`. Hub bell (`yahdle_pending_for`) has a `Rematch` bucket. Commit `f1c1a54`.
