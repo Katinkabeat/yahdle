@@ -108,6 +108,34 @@ export default function SoloGamePage({ session, profile, isAdmin }) {
   const checkingGate = !isGameOver && serverResult === 'checking'
   const showServerPanel = !isGameOver && serverResult && serverResult !== 'checking'
 
+  // Test-account members (c332) may replay the daily as often as they like —
+  // a small secondary button on the already-played panel, checked
+  // server-side (never trust the client) both here and again by
+  // yahdle_record_daily_solo on the write itself.
+  const [isTestAccount, setIsTestAccount] = useState(false)
+  useEffect(() => {
+    let alive = true
+    if (!userId) return
+    supabase.rpc('sq_is_test_account', { uid: userId })
+      .then(({ data }) => { if (alive) setIsTestAccount(!!data) })
+      .catch(() => { if (alive) setIsTestAccount(false) })
+    return () => { alive = false }
+  }, [userId])
+
+  // Reset onto a fresh copy of today's daily, bypassing the already-played
+  // gate for this session. Clears the saved scorecard AND the "already
+  // recorded" session flag so the normal finish path fires recordDaily()
+  // again — yahdle_record_daily_solo overwrites today's row (and refreshes
+  // completed_at) server-side for members. Non-members never see this
+  // button; the server re-checks membership on the write regardless.
+  function handleReplay() {
+    try { localStorage.removeItem(storageKey(userId, gameId)) } catch {}
+    try { sessionStorage.removeItem(`yahdle:recorded:${userId}:${gameId}`) } catch {}
+    setRecordState('idle')
+    setState(makeInitialState())
+    setServerResult(null)
+  }
+
   // True once the puzzle's Atlantic day has passed. A game finished after
   // its day rolled over can't be recorded — the server guard rejects any
   // non-today play_date (past days are immutable, per c237). We surface a
@@ -299,6 +327,16 @@ export default function SoloGamePage({ session, profile, isAdmin }) {
               <button className="btn-secondary" onClick={() => navigate('/')}>← Lobby</button>
               <button className="btn-primary" onClick={() => navigate('/stats')}>🏆 Leaderboard</button>
             </div>
+            {/* c332: test-account members only, so this never shows for real players. */}
+            {isTestAccount && (
+              <button
+                type="button"
+                className="mt-3 text-xs font-bold opacity-70 hover:underline hover:opacity-100"
+                onClick={handleReplay}
+              >
+                Replay (test account)
+              </button>
+            )}
           </div>
         </div>
       )}
