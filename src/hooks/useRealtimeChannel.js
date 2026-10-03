@@ -1,26 +1,24 @@
-// useRealtimeChannel — subscribe to one or more Supabase realtime channels
+// useRealtimeChannel — subscribe to a private Supabase Broadcast topic
 // with the connection-resilience patterns every SideQuest game needs:
 //
-//   1. Postgres-changes subscription (live updates from one or more tables)
+//   1. Broadcast-from-database subscription (the yahdle_broadcast_game_change
+//      trigger in supabase/migrations/yahdle_realtime_broadcast.sql sends
+//      event 'change' via realtime.send; no publication / replica identity)
 //   2. Polling fallback (in case the realtime socket is down — common on
 //      free-tier Supabase quotas)
 //   3. Visibility/focus refresh + auto-reconnect (so a phone waking up
 //      after a long break catches up immediately and rebinds the channel)
 //   4. Cleanup on unmount or dependency change
 //
-// Pass an array of `subscriptions` to listen on multiple tables or events
-// for the same game. The handler is called with the Supabase payload.
+// Topics: `yahdle:game:<game_id>` (members of that game) and
+// `yahdle:user:<user_id>` (lobby feed). Access is enforced by RLS policies
+// on realtime.messages. The handler is called with the broadcast payload:
+//   { table, event, game_id, user_id?, status, new? }
 //
 // Example (multiplayer game page):
 //
-//   const channelRef = useRef(null)
 //   useRealtimeChannel({
-//     channelName: `game-${gameId}`,
-//     channelRef,
-//     subscriptions: [
-//       { event: 'UPDATE', schema: 'public', table: 'yahdle_games',   filter: `id=eq.${gameId}` },
-//       { event: '*',      schema: 'public', table: 'yahdle_players', filter: `game_id=eq.${gameId}` },
-//     ],
+//     topic: `yahdle:game:${gameId}`,
 //     onChange: () => loadGame(),
 //     pollMs: 10_000,
 //     enabled: !!gameId,
@@ -30,20 +28,13 @@
 // identity, wrap it in useCallback so this hook doesn't re-subscribe on
 // every render. The default poll interval is 10 seconds — match-style
 // games may want longer (30s+); rapid-turn games can stay at 10s.
-//
-// REPLICA IDENTITY FULL — Supabase realtime needs replica identity full
-// on any table whose `filter` uses a non-primary-key column (e.g.
-// `game_id` on a players table). Set this in your migration:
-//
-//   alter table public.yahdle_players replica identity full;
 
 import { useEffect, useRef } from 'react'
 import { supabase } from '../lib/supabase.js'
 
 export function useRealtimeChannel({
-  channelName,
+  topic,
   channelRef,
-  subscriptions,
   onChange,
   pollMs = 10_000,
   enabled = true,
@@ -54,7 +45,7 @@ export function useRealtimeChannel({
   useEffect(() => { onChangeRef.current = onChange }, [onChange])
 
   useEffect(() => {
-    if (!enabled || !channelName) return
+    if (!enabled || !topic) return
 
     const localChannelRef = channelRef ?? { current: null }
 
@@ -62,13 +53,12 @@ export function useRealtimeChannel({
       if (localChannelRef.current) {
         supabase.removeChannel(localChannelRef.current)
       }
-      let ch = supabase.channel(channelName)
-      for (const sub of subscriptions) {
-        ch = ch.on('postgres_changes', sub, (payload) => {
+      localChannelRef.current = supabase
+        .channel(topic, { config: { private: true } })
+        .on('broadcast', { event: 'change' }, ({ payload }) => {
           onChangeRef.current?.(payload)
         })
-      }
-      localChannelRef.current = ch.subscribe()
+        .subscribe()
     }
 
     subscribe()
@@ -102,8 +92,5 @@ export function useRealtimeChannel({
       document.removeEventListener('visibilitychange', handleVisible)
       window.removeEventListener('focus', handleVisible)
     }
-    // Stringify subscriptions so callers can inline the array literal
-    // without triggering needless re-subscribes.
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [channelName, enabled, pollMs, JSON.stringify(subscriptions)])
+  }, [topic, enabled, pollMs])
 }

@@ -136,12 +136,9 @@ export function useMultiplayerLobby(userId) {
   useEffect(() => { reload() }, [reload])
 
   useRealtimeChannel({
-    channelName: `lobby_yahdle_${userId}`,
-    subscriptions: userId ? [
-      { event: '*', schema: 'public', table: 'yahdle_games', filter: `created_by=eq.${userId}` },
-      { event: '*', schema: 'public', table: 'yahdle_games', filter: `invited_user_id=eq.${userId}` },
-      { event: '*', schema: 'public', table: 'yahdle_players', filter: `user_id=eq.${userId}` },
-    ] : [],
+    // Per-user private Broadcast topic: the trigger sends me changes to games
+    // I'm in, created, or was invited to.
+    topic: userId ? `yahdle:user:${userId}` : null,
     onChange: reload,
     pollMs: 30_000,
     enabled: !!userId,

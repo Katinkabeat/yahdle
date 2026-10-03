@@ -225,12 +225,9 @@ export default function MultiGamePage({ session, profile, isAdmin }) {
   }, [gameId, isWaiting, iAmInvitee, iAmPlayer, refresh])
 
   useRealtimeChannel({
-    channelName: `game-yahdle-${gameId}`,
-    subscriptions: gameId ? [
-      { event: 'UPDATE', schema: 'public', table: 'yahdle_games', filter: `id=eq.${gameId}` },
-      { event: '*', schema: 'public', table: 'yahdle_players', filter: `game_id=eq.${gameId}` },
-      { event: 'UPDATE', schema: 'public', table: 'yahdle_turn_state', filter: `game_id=eq.${gameId}` },
-    ] : [],
+    // Private Broadcast topic fed by the yahdle_broadcast_game_change trigger
+    // (yahdle_games UPDATE + yahdle_players changes for this game).
+    topic: gameId ? `yahdle:game:${gameId}` : null,
     onChange: refresh,
     // Worst-case floor when realtime (flaky on free-tier) and the push-
     // refresh both miss. Only fires while the tab is actually VISIBLE
