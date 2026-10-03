@@ -394,3 +394,6 @@ Hub group `test-accounts` (Test + Claude test logins) is excluded from every lea
 
 ## 2026-09-24 — Rematch push moved to a DB trigger (c378)
 `rematch_requested` push now fires from `on_yahdle_rematch_requested` (AFTER UPDATE, `rematch_requested_by` null→set, pg_net) instead of a client POST after `yahdle_request_rematch`, which could drop silently on mobile and never reached `sq_http_log`. Hub bell (`yahdle_pending_for`) has a `Rematch` bucket. Commit `f1c1a54`.
+
+## 2026-10-03 — Realtime → Broadcast (c386, `08572e8`)
+`supabase/migrations/yahdle_realtime_broadcast.sql`: trigger `yahdle_broadcast_game_change` on `yahdle_games` (UPDATE) + `yahdle_players` (I/U/D) → `yahdle:game:<id>` and `yahdle:user:<uid>` (players, creator, `invited_user_id`, `invited_user_ids[]`); policies `yahdle_realtime_*`. `useRealtimeChannel` now takes `{ topic }` instead of `channelName`+`subscriptions`. Dropped the dead `yahdle_turn_state` subscription (table was never in the publication). yahdle_* tables dropped from the publication.
